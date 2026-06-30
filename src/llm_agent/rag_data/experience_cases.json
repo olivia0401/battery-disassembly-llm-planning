@@ -1,0 +1,853 @@
+[
+  {
+    "id": "seed_001",
+    "task": "Go to home position",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "moveTo",
+          "params": {
+            "target": "HOME"
+          }
+        }
+      ]
+    },
+    "execution_time": 3.2,
+    "timestamp": 1700000001.0
+  },
+  {
+    "id": "seed_002",
+    "task": "Navigate to the home configuration",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "moveTo",
+          "params": {
+            "target": "HOME"
+          }
+        }
+      ]
+    },
+    "execution_time": 3.1,
+    "timestamp": 1700000002.0
+  },
+  {
+    "id": "seed_003",
+    "task": "Return to home",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "moveTo",
+          "params": {
+            "target": "HOME"
+          }
+        }
+      ]
+    },
+    "execution_time": 3.3,
+    "timestamp": 1700000003.0
+  },
+  {
+    "id": "seed_004",
+    "task": "Open the gripper",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "openGripper",
+          "params": {}
+        }
+      ]
+    },
+    "execution_time": 1.5,
+    "timestamp": 1700000004.0
+  },
+  {
+    "id": "seed_005",
+    "task": "Activate gripper opening",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "openGripper",
+          "params": {}
+        }
+      ]
+    },
+    "execution_time": 1.4,
+    "timestamp": 1700000005.0
+  },
+  {
+    "id": "seed_006",
+    "task": "Open the hand",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "openGripper",
+          "params": {}
+        }
+      ]
+    },
+    "execution_time": 1.6,
+    "timestamp": 1700000006.0
+  },
+  {
+    "id": "seed_007",
+    "task": "Close the gripper",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "closeGripper",
+          "params": {}
+        }
+      ]
+    },
+    "execution_time": 1.8,
+    "timestamp": 1700000007.0
+  },
+  {
+    "id": "seed_008",
+    "task": "Close the hand",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "closeGripper",
+          "params": {}
+        }
+      ]
+    },
+    "execution_time": 1.7,
+    "timestamp": 1700000008.0
+  },
+  {
+    "id": "seed_009",
+    "task": "Grasp the top cover bolts",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        }
+      ]
+    },
+    "execution_time": 6.8,
+    "timestamp": 1700000009.0
+  },
+  {
+    "id": "seed_010",
+    "task": "Pick up the bolts from the top cover",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        }
+      ]
+    },
+    "execution_time": 6.9,
+    "timestamp": 1700000010.0
+  },
+  {
+    "id": "seed_011",
+    "task": "Grab the top cover bolts",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        }
+      ]
+    },
+    "execution_time": 7.1,
+    "timestamp": 1700000011.0
+  },
+  {
+    "id": "seed_012",
+    "task": "Pick up bolts",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        }
+      ]
+    },
+    "execution_time": 6.7,
+    "timestamp": 1700000012.0
+  },
+  {
+    "id": "seed_013",
+    "task": "Grasp BatteryBox_0",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        }
+      ]
+    },
+    "execution_time": 7.2,
+    "timestamp": 1700000013.0
+  },
+  {
+    "id": "seed_014",
+    "task": "Pick up the battery",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        }
+      ]
+    },
+    "execution_time": 7.0,
+    "timestamp": 1700000014.0
+  },
+  {
+    "id": "seed_015",
+    "task": "Secure the battery box",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        }
+      ]
+    },
+    "execution_time": 7.3,
+    "timestamp": 1700000015.0
+  },
+  {
+    "id": "seed_016",
+    "task": "Grab the battery",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        }
+      ]
+    },
+    "execution_time": 6.9,
+    "timestamp": 1700000016.0
+  },
+  {
+    "id": "seed_017",
+    "task": "Release the battery",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "release",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        }
+      ]
+    },
+    "execution_time": 2.8,
+    "timestamp": 1700000017.0
+  },
+  {
+    "id": "seed_018",
+    "task": "Let go of the battery",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "release",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        }
+      ]
+    },
+    "execution_time": 2.9,
+    "timestamp": 1700000018.0
+  },
+  {
+    "id": "seed_019",
+    "task": "Drop the battery",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "release",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        }
+      ]
+    },
+    "execution_time": 2.7,
+    "timestamp": 1700000019.0
+  },
+  {
+    "id": "seed_020",
+    "task": "Release the bolts",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "release",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        }
+      ]
+    },
+    "execution_time": 2.6,
+    "timestamp": 1700000020.0
+  },
+  {
+    "id": "seed_021",
+    "task": "Move to the placement area",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        }
+      ]
+    },
+    "execution_time": 4.2,
+    "timestamp": 1700000021.0
+  },
+  {
+    "id": "seed_022",
+    "task": "Navigate to the drop-off zone",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        }
+      ]
+    },
+    "execution_time": 4.1,
+    "timestamp": 1700000022.0
+  },
+  {
+    "id": "seed_023",
+    "task": "Go to placement position",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        }
+      ]
+    },
+    "execution_time": 4.3,
+    "timestamp": 1700000023.0
+  },
+  {
+    "id": "seed_024",
+    "task": "Move to approach position",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "moveTo",
+          "params": {
+            "target": "approach_bolts"
+          }
+        }
+      ]
+    },
+    "execution_time": 3.8,
+    "timestamp": 1700000024.0
+  },
+  {
+    "id": "seed_025",
+    "task": "Remove the battery cover bolts",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 2,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        },
+        {
+          "step": 3,
+          "name": "release",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 4,
+          "name": "moveTo",
+          "params": {
+            "target": "HOME"
+          }
+        }
+      ]
+    },
+    "execution_time": 18.5,
+    "timestamp": 1700000025.0
+  },
+  {
+    "id": "seed_026",
+    "task": "Place the bolts in the storage area",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 2,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        },
+        {
+          "step": 3,
+          "name": "release",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        }
+      ]
+    },
+    "execution_time": 14.2,
+    "timestamp": 1700000026.0
+  },
+  {
+    "id": "seed_027",
+    "task": "Grasp the bolts and place them safely",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 2,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        },
+        {
+          "step": 3,
+          "name": "release",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        }
+      ]
+    },
+    "execution_time": 14.8,
+    "timestamp": 1700000027.0
+  },
+  {
+    "id": "seed_028",
+    "task": "Safely remove and store the bolts",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 2,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        },
+        {
+          "step": 3,
+          "name": "release",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 4,
+          "name": "moveTo",
+          "params": {
+            "target": "HOME"
+          }
+        }
+      ]
+    },
+    "execution_time": 19.1,
+    "timestamp": 1700000028.0
+  },
+  {
+    "id": "seed_029",
+    "task": "Execute complete bolt removal sequence",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "moveTo",
+          "params": {
+            "target": "approach_bolts"
+          }
+        },
+        {
+          "step": 2,
+          "name": "grasp",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 3,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        },
+        {
+          "step": 4,
+          "name": "release",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 5,
+          "name": "moveTo",
+          "params": {
+            "target": "HOME"
+          }
+        }
+      ]
+    },
+    "execution_time": 22.7,
+    "timestamp": 1700000029.0
+  },
+  {
+    "id": "seed_030",
+    "task": "Disassemble the battery",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 2,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        },
+        {
+          "step": 3,
+          "name": "release",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 4,
+          "name": "moveTo",
+          "params": {
+            "target": "HOME"
+          }
+        },
+        {
+          "step": 5,
+          "name": "grasp",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        },
+        {
+          "step": 6,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        },
+        {
+          "step": 7,
+          "name": "release",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        },
+        {
+          "step": 8,
+          "name": "moveTo",
+          "params": {
+            "target": "HOME"
+          }
+        }
+      ]
+    },
+    "execution_time": 35.6,
+    "timestamp": 1700000030.0
+  },
+  {
+    "id": "seed_031",
+    "task": "Complete the recycling preparation task",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 2,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        },
+        {
+          "step": 3,
+          "name": "release",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 4,
+          "name": "moveTo",
+          "params": {
+            "target": "HOME"
+          }
+        },
+        {
+          "step": 5,
+          "name": "grasp",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        },
+        {
+          "step": 6,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        },
+        {
+          "step": 7,
+          "name": "release",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        },
+        {
+          "step": 8,
+          "name": "moveTo",
+          "params": {
+            "target": "HOME"
+          }
+        }
+      ]
+    },
+    "execution_time": 36.2,
+    "timestamp": 1700000031.0
+  },
+  {
+    "id": "seed_032",
+    "task": "Pick up and place battery",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        },
+        {
+          "step": 2,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        },
+        {
+          "step": 3,
+          "name": "release",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        }
+      ]
+    },
+    "execution_time": 14.5,
+    "timestamp": 1700000032.0
+  },
+  {
+    "id": "seed_033",
+    "task": "Store the battery safely",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        },
+        {
+          "step": 2,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        },
+        {
+          "step": 3,
+          "name": "release",
+          "params": {
+            "target": "BatteryBox_0"
+          }
+        },
+        {
+          "step": 4,
+          "name": "moveTo",
+          "params": {
+            "target": "HOME"
+          }
+        }
+      ]
+    },
+    "execution_time": 18.3,
+    "timestamp": 1700000033.0
+  },
+  {
+    "id": "seed_034",
+    "task": "Transfer bolts to storage",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 2,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        },
+        {
+          "step": 3,
+          "name": "release",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        }
+      ]
+    },
+    "execution_time": 14.1,
+    "timestamp": 1700000034.0
+  },
+  {
+    "id": "seed_035",
+    "task": "Remove and place top cover components",
+    "plan": {
+      "plan": [
+        {
+          "step": 1,
+          "name": "grasp",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 2,
+          "name": "moveTo",
+          "params": {
+            "target": "place_bolts"
+          }
+        },
+        {
+          "step": 3,
+          "name": "release",
+          "params": {
+            "target": "TopCoverBolts"
+          }
+        },
+        {
+          "step": 4,
+          "name": "moveTo",
+          "params": {
+            "target": "HOME"
+          }
+        }
+      ]
+    },
+    "execution_time": 18.9,
+    "timestamp": 1700000035.0
+  }
+]

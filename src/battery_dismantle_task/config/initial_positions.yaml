@@ -1,0 +1,9 @@
+# Initial joint positions for Gen3 with Robotiq gripper
+# Using approach_bolts position to avoid gripper-wrist collision
+joint_1: 0.0698
+joint_2: 0.8029
+joint_3: 3.1241
+joint_4: -1.885
+joint_5: 0.0175
+joint_6: -0.4538
+joint_7: 1.6057

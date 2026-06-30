@@ -1,0 +1,87 @@
+<?xml version="1.0"?>
+<!-- Custom gen3 + robotiq_2f_85 xacro that uses our fixed gripper macro -->
+<robot name="gen3" xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <!-- Arguments -->
+    <xacro:arg name="arm" default="gen3" />
+    <xacro:arg name="dof" default="7" />
+    <xacro:arg name="vision" default="false" />
+    <xacro:arg name="robot_ip" default="192.168.11.11" />
+    <xacro:arg name="username" default="admin" />
+    <xacro:arg name="password" default="admin" />
+    <xacro:arg name="port" default="10000" />
+    <xacro:arg name="port_realtime" default="10001" />
+    <xacro:arg name="session_inactivity_timeout_ms" default="60000" />
+    <xacro:arg name="connection_inactivity_timeout_ms" default="2000" />
+    <xacro:arg name="gripper" default="robotiq_2f_85" />
+    <xacro:arg name="gripper_joint_name" default="finger_joint" />
+    <xacro:arg name="gripper_max_velocity" default="100.0" />
+    <xacro:arg name="gripper_max_force" default="100.0" />
+    <xacro:arg name="sim_gazebo" default="false" />
+    <xacro:arg name="sim_ignition" default="false" />
+    <xacro:arg name="sim_isaac" default="false" />
+    <xacro:arg name="prefix" default="" />
+    <xacro:arg name="use_fake_hardware" default="false" />
+    <xacro:arg name="fake_sensor_commands" default="false" />
+    <xacro:arg name="use_internal_bus_gripper_comm" default="false" />
+    <xacro:arg name="use_external_cable" default="false" />
+    <xacro:arg name="initial_positions_file" default="$(find battery_dismantle_task)/config/initial_positions.yaml"/>
+
+    <!-- Convert to property to use substitution in function -->
+    <xacro:property name="initial_positions_file" default="$(arg initial_positions_file)"/>
+    <xacro:property name="prefix_val" value="$(arg prefix)" />
+
+    <!-- World link -->
+    <link name="world" />
+
+    <!-- Load the Gen3 arm macro -->
+    <xacro:include filename="$(find kortex_description)/arms/$(arg arm)/$(arg dof)dof/urdf/$(arg arm)_macro.xacro" />
+
+    <!-- Load the arm -->
+    <xacro:load_arm
+        parent="world"
+        dof="$(arg dof)"
+        vision="$(arg vision)"
+        robot_ip="$(arg robot_ip)"
+        username="$(arg username)"
+        password="$(arg password)"
+        port="$(arg port)"
+        port_realtime="$(arg port_realtime)"
+        session_inactivity_timeout_ms="$(arg session_inactivity_timeout_ms)"
+        connection_inactivity_timeout_ms="$(arg connection_inactivity_timeout_ms)"
+        prefix="${prefix_val}"
+        use_internal_bus_gripper_comm="$(arg use_internal_bus_gripper_comm)"
+        use_fake_hardware="$(arg use_fake_hardware)"
+        fake_sensor_commands="$(arg fake_sensor_commands)"
+        sim_gazebo="$(arg sim_gazebo)"
+        sim_ignition="$(arg sim_ignition)"
+        sim_isaac="$(arg sim_isaac)"
+        isaac_joint_commands="/isaac_joint_commands"
+        isaac_joint_states="/isaac_joint_states"
+        gripper_joint_name="$(arg gripper_joint_name)"
+        gripper_max_velocity="$(arg gripper_max_velocity)"
+        gripper_max_force="$(arg gripper_max_force)"
+        use_external_cable="$(arg use_external_cable)"
+        initial_positions="${xacro.load_yaml(initial_positions_file)}"
+        moveit_active="false">
+        <origin xyz="0 0 0" rpy="0 0 0" />
+    </xacro:load_arm>
+
+    <!-- Load OUR FIXED gripper macro instead of kortex's -->
+    <!-- last_arm_link is "bracelet_link" for Gen3, defined by arm macro -->
+    <xacro:include filename="$(find battery_dismantle_task)/grippers/robotiq_2f_85/urdf/robotiq_2f_85_macro.xacro" />
+
+    <xacro:load_gripper
+        parent="${prefix_val}bracelet_link"
+        prefix="${prefix_val}"
+        use_fake_hardware="$(arg use_fake_hardware)"
+        fake_sensor_commands="$(arg fake_sensor_commands)"
+        sim_ignition="$(arg sim_ignition)"
+        sim_isaac="$(arg sim_isaac)"
+        isaac_joint_commands="/isaac_joint_commands"
+        isaac_joint_states="/isaac_joint_states"
+        com_port="/dev/ttyUSB0"
+        use_internal_bus_gripper_comm="$(arg use_internal_bus_gripper_comm)"
+        moveit_active="false" />
+
+</robot>

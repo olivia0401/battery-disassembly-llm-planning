@@ -1,0 +1,38 @@
+# Controller configuration for fake execution
+# Even with fake_execution: true, we need to define controller names
+# so that trajectory_execution_manager knows which joints to "fake" control
+#
+# NOTE: moveit_simple_controller_manager requires all of this nested under a
+# top-level "moveit_simple_controller_manager:" key — without it, the plugin
+# silently returns 0 controllers ("Returned 0 controllers in list") and
+# trajectory_execution_manager fails with "Unable to identify any set of
+# controllers that can actuate the specified joints", even though planning
+# itself succeeds and the named controllers genuinely exist and work fine
+# when driven directly (as motion_executor.py's Method 6 direct-trajectory
+# path does). This was the last blocker after fixing the ACM/self-collision
+# issues — planning succeeded ("Solution found") but execution handoff failed
+# purely because of this missing namespace.
+moveit_simple_controller_manager:
+  controller_names:
+    - fake_manipulator_controller
+    - fake_gripper_controller
+
+  fake_manipulator_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - joint_1
+      - joint_2
+      - joint_3
+      - joint_4
+      - joint_5
+      - joint_6
+      - joint_7
+
+  fake_gripper_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - robotiq_85_left_knuckle_joint

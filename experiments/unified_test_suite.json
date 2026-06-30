@@ -1,0 +1,60 @@
+{
+  "metadata": {
+    "total_commands": 34,
+    "description": "Improved suite: no ID leak, full skill coverage, clean categories."
+  },
+  "commands": {
+    "functional_primitive": [
+      "Go to the home position",
+      "Return home",
+      "Open the gripper",
+      "Close the gripper",
+      "Open the hand",
+      "Move to the safe zone",
+      "Move to the inspection pose"
+    ],
+    "functional_grasp_release": [
+      "Grasp the top cover bolts",
+      "Pick up the top cover bolts",
+      "Grasp the battery box",
+      "Release the battery box",
+      "Let go of the bolts"
+    ],
+    "functional_skill_specific": [
+      "Unscrew the top cover bolts",
+      "Disconnect the BMS connector",
+      "Disconnect the power connector",
+      "Inspect the top cover",
+      "Inspect the battery box for damage"
+    ],
+    "functional_multistep": [
+      "Remove the top cover bolts",
+      "Pick up the bolts and put them in the sorting area",
+      "Disassemble the battery"
+    ],
+    "stress_ambiguous": [
+      "Move it over there",
+      "Put the thing away"
+    ],
+    "stress_underspecified": [
+      "Remove the bolts",
+      "Take it apart"
+    ],
+    "stress_colloquial": [
+      "Get rid of those bolts",
+      "Pop open the gripper",
+      "Stick the battery box in the sorting area"
+    ],
+    "stress_out_of_domain": [
+      "Charge the battery to 80%",
+      "Weld the cover back on",
+      "Measure the battery voltage",
+      "Paint the casing"
+    ],
+    "stress_complex_reasoning": [
+      "Prepare the battery for recycling",
+      "Disconnect all the connectors",
+      "Carefully remove the cover bolts"
+    ]
+  }
+}

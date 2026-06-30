@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>battery_dismantle_task</name>
+  <version>0.1.0</version>
+  <description>LLM-controlled battery disassembly task using Kinova Gen3 with Robotiq gripper</description>
+  <maintainer email="olivia@example.com">Olivia</maintainer>
+  <license>Apache-2.0</license>
+
+  <!-- 构建工具 -->
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!-- MoveIt 和机器人 -->
+  <depend>moveit_fake_controller_manager</depend>
+  <depend>kortex_description</depend>
+
+  <!-- 可视化 -->
+  <depend>rviz2</depend>
+
+  <!-- Python 依赖（运行时） -->
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <depend>moveit_py</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

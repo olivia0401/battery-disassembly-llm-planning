@@ -1,0 +1,92 @@
+{
+  "joints": {
+    "arm": [
+      "joint_1",
+      "joint_2",
+      "joint_3",
+      "joint_4",
+      "joint_5",
+      "joint_6",
+      "joint_7"
+    ],
+    "gripper": [
+      "robotiq_85_left_knuckle_joint"
+    ]
+  },
+  "poses": {
+    "HOME": [0.0, 0.2618, 3.14159, -2.2689, 0.0, 0.9599, 1.5708],
+    "OPEN": [0.1],
+    "CLOSE": [0.8],
+    "approach_bolts": [0.0698, 0.8029, 3.1241, -1.885, 0.0175, -0.4538, 1.6057],
+    "place_bolts": [0.8203, 1.2392, 3.0369, -1.1345, 0.1396, -0.7679, 2.2515]
+  },
+  "defaults": {
+    "velocity_scaling": 1.0,
+    "accel_scaling": 1.0
+  },
+  "scene": {
+    "battery": {
+      "id": "BatteryBox",
+      "frame": "world",
+      "size": [0.3, 0.2, 0.15],
+      "pose": {
+        "position": { "x": 0.5, "y": 0.0, "z": 0.075 },
+        "orientation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 }
+      },
+      "comment": "Battery on ground level (base_link at z=0), battery center at z=0+0.075=0.075, bottom at z=0"
+    },
+    "parts": [
+      {
+        "id": "TopCoverBolts",
+        "frame": "world",
+        "type": "box",
+        "size": [0.3, 0.2, 0.02],
+        "pose": {
+          "position": { "x": 0.5, "y": 0.0, "z": 0.16 },
+          "orientation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 }
+        },
+        "comment": "Cover on top of battery, z=0.15+0.01=0.16 (battery_top + half_cover)"
+      }
+    ]
+  },
+  "objects": {
+    "TopCoverBolts": {
+      "comment": "顶盖螺栓 - 位于电池顶部 (x=0.5, y=0.0, z=0.16). 夹爪需要从上方接近",
+      "approach": [-0.0524, 0.7505, 0.0, 1.4486, -0.0175, 0.9948, -0.0524],
+      "place": [0.8203, 1.2392, 3.0369, -1.1345, 0.1396, -0.7679, 2.2515],
+      "retreat": [0.0, 0.2618, 3.14159, -2.2689, 0.0, 0.9599, 1.5708],
+      "gripper_hooks": {
+        "on_approach": "OPEN",
+        "after_approach": "CLOSE",
+        "after_place": "OPEN"
+      },
+      "io": {
+        "do_attach_after_approach": true,
+        "do_detach_after_place": true
+      },
+      "cartesian_hints": {
+        "approach_position": { "x": 0.5, "y": 0.0, "z": 0.30 },
+        "place_position": { "x": 0.3, "y": -0.4, "z": 0.10 }
+      }
+    },
+    "BatteryBox_0": {
+      "comment": "电池主体 - 中心在 (x=0.5, y=0.0, z=0.075). 夹爪从侧面接近",
+      "approach": [-0.0524, 0.7505, 0.0, 1.4486, -0.0175, 0.9948, -0.0524],
+      "place": [-0.8727, 1.0297, 3.1067, -1.309, 0.6109, -0.6283, 1.5708],
+      "retreat": [0.0, 0.2618, 3.14159, -2.2689, 0.0, 0.9599, 1.5708],
+      "gripper_hooks": {
+        "on_approach": "OPEN",
+        "after_approach": "CLOSE",
+        "after_place": "OPEN"
+      },
+      "io": {
+        "do_attach_after_approach": true,
+        "do_detach_after_place": true
+      },
+      "cartesian_hints": {
+        "approach_position": { "x": 0.5, "y": -0.2, "z": 0.15 },
+        "place_position": { "x": 0.3, "y": 0.4, "z": 0.075 }
+      }
+    }
+  }
+}

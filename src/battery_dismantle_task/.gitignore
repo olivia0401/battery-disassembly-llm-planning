@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# ROS2
+install/
+log/
+build/
+
+# Environment variables
+.env
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Outputs
+llm_agent/outputs/*.json
+llm_agent/outputs/*.txt
+
+# System
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# RAG Database (ChromaDB - generated at runtime)
+llm_agent/rag_data/chromadb/
+*.sqlite3
+
+# Keep JSON but ignore binary database
+!llm_agent/rag_data/experience_cases.json

@@ -1,0 +1,12 @@
+# Safety constraints for robot operations
+
+# Forbidden skill sequences (prevent unsafe operations)
+forbidden_sequences:
+  - ["grasp", "grasp"]           # Cannot grasp twice in a row
+  - ["release", "release"]       # Cannot release twice in a row
+  - ["closeGripper", "grasp"]    # Must open gripper before grasping
+
+# Runtime sensor limits
+runtime_limits:
+  force_max: 50.0        # Maximum force in Newtons
+  temperature_max: 60.0  # Maximum temperature in Celsius

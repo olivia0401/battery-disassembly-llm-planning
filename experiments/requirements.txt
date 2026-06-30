@@ -1,0 +1,13 @@
+# Experimental Suite Dependencies
+# Install: pip install -r requirements.txt
+
+# Data analysis
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Inherit from main LLM agent
+# Install these from: ../src/llm_agent/requirements.txt
+# - openai>=1.0.0
+# - chromadb>=0.4.0
+# - sentence-transformers>=2.2.0
+# - pydantic>=2.0.0

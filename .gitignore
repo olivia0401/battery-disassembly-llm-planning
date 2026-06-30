@@ -1,0 +1,49 @@
+# ROS 2 Build artifacts
+build/
+install/
+log/
+
+# Backup files
+backup_*/
+*.tar.gz
+*.zip
+
+# Log files
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+*.tmp
+*.bak
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# API keys and sensitive data
+.env
+*.key
+
+# RAG database (large, regenerable from rag_data/experience_cases*.json)
+src/llm_agent/rag_data/chromadb/
+
+# Experiment outputs that are large/regenerable — keep results_fast/*.jsonl
+# (the actual data) but not derived artefacts that analyze.py/build_workbook.py
+# regenerate from it.
+experiments/eval/Result_robot.xlsx
+experiments/eval/analysis_summary.json
