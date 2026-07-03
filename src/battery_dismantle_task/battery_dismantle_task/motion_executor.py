@@ -370,7 +370,7 @@ class MotionExecutor:
         point.accelerations = [0.0] * 7
 
         # Set time to reach target (scaled by velocity factor)
-        duration_sec = 3.0 / self.vel_scale  # Base duration scaled by velocity
+        duration_sec = 2.0 / self.vel_scale  # Base duration scaled by velocity
         point.time_from_start = Duration(sec=int(duration_sec), nanosec=int((duration_sec % 1) * 1e9))
 
         trajectory.points.append(point)

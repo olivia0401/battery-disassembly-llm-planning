@@ -3,6 +3,8 @@
 
 import math
 
+from .scene_manager import TABLE_Z, PLACED_OBJECT_DIMS
+
 # joint_7 is the wrist-roll joint on the Kinova Gen3 (confirmed by HOME pose
 # in config/waypoints.json: index 6 = 1.5708 rad). rotateGripper and unscrew
 # both rotate this joint relative to a base pose; there is no separate wrist
@@ -28,10 +30,10 @@ APPROACH_ORIENTATIONS = {
 }
 
 # Approach geometry (m). For a top-down grasp the end-effector is placed this
-# far above the object centre along the gripper approach axis. It matches the
-# 0.05 m attach offset in scene_manager.attach_object so the grasped object
-# stays in place (doesn't jump to the gripper) when attached.
-GRIPPER_GRASP_REACH = 0.05
+# far above the object centre along the gripper approach axis. Matches
+# scene_manager.ATTACH_OFFSET_Z (the measured fingertip reach) so the grasped
+# object stays in place (doesn't jump) when attached.
+GRIPPER_GRASP_REACH = 0.04
 SIDE_CLEARANCE = 0.10       # stand off this far beyond the object's -Y face
 
 
@@ -89,12 +91,51 @@ class SkillHandlers:
         # which MoveIt automatically (a) removes from world collision objects
         # when the ID matches, and (b) keeps glued to end_effector_link via TF
         # with no polling timer needed.
-        if not self.scene.attach_object(object_name, "end_effector_link"):
-            self.node.get_logger().warn(f"⚠️  attach_object failed for '{object_name}' — "
-                                         f"planning scene may still show a stale world collision")
+        # Look up the object's real box size so the attached copy matches its
+        # actual mesh (attach_object used to hardcode 5x5x2cm for every
+        # object, so e.g. TopCoverBolts — 30x20x2cm — visibly shrank/clipped
+        # the moment it was grasped).
+        live_info = self.motion.get_object_pose(object_name)
+        real_dims = live_info[1] if live_info and live_info[1] else None
+        if not self.scene.attach_object(object_name, "end_effector_link", dimensions=real_dims):
+            self.node.get_logger().error(f"❌ attach_object failed for '{object_name}' — "
+                                          f"aborting grasp so the arm doesn't move an unattached object")
+            return False
 
         self.node.get_logger().info(f"✅ Grasp '{object_name}' done")
         return True
+
+    def _lower_onto_table(self, seed_joints, where="place-lower"):
+        """Gently lower the held object straight down until it rests on the
+        table, keeping the current gripper orientation, so the part is SET DOWN
+        instead of dropped the moment the gripper opens.
+
+        Reads the gripper's live world pose, solves IK for the same XY/orientation
+        at a Z that puts the box on the table, and moves there. Returns True (a
+        no-op) and lets the place continue if the pose/IK can't be resolved or
+        the gripper is already at table height — the gentle lower is a polish
+        step, not a hard gate.
+        """
+        ee = self.scene.get_link_world_pose("end_effector_link")
+        if ee is None:
+            self.node.get_logger().warn("place: no gripper pose; skipping gentle lower")
+            return True
+        (ex, ey, ez), quat = ee
+        # Use the real held object's dims/offset (scene.held_z_offset), not a
+        # generic constant — that used to assume every object sat at
+        # ATTACH_OFFSET_Z, which stopped being true once oversized objects
+        # (e.g. BatteryBox_0) got pushed forward to clear the gripper body.
+        dims = self.scene.attached_dims or PLACED_OBJECT_DIMS
+        target_z = TABLE_Z + dims[2] / 2.0 + self.scene.held_z_offset(dims)
+        if ez - target_z <= 0.005:
+            return True  # already at/below table height — nothing to lower
+        joints = self.motion.compute_ik((ex, ey, target_z), quat, seed_joints=seed_joints)
+        if not joints:
+            self.node.get_logger().warn("place: IK for lower failed; skipping gentle lower")
+            return True
+        self.node.get_logger().info(
+            f"⬇️  Lowering held object {ez - target_z:.3f} m onto the table before release")
+        return self.motion.plan_execute_arm(joints, where)
 
     def execute_release(self, object_name, place_joints):
         """Execute release sequence"""
@@ -111,6 +152,9 @@ class SkillHandlers:
         if not self.motion.plan_execute_arm(place_joints, "place"):
             return False
 
+        # 1.5) Gently lower so the object is set down, not dropped, on release.
+        self._lower_onto_table(place_joints, "release-lower")
+
         # 2) Open gripper
         open_joints = self.waypoints.get("poses", {}).get(self.open_gripper_pose)
         if not open_joints or not self.motion.plan_execute_gripper(open_joints, "release-gripper"):
@@ -121,7 +165,8 @@ class SkillHandlers:
         # comment for why visual_state_manager's own attach/detach path
         # doesn't actually work.
         if not self.scene.detach_object(object_name, "end_effector_link"):
-            self.node.get_logger().warn(f"⚠️  detach_object failed for '{object_name}'")
+            self.node.get_logger().error(f"❌ detach_object failed for '{object_name}'")
+            return False
 
         # 4) Retreat
         retreat_joints = self.waypoints["objects"][object_name].get("retreat")
@@ -148,9 +193,18 @@ class SkillHandlers:
             if not self.motion.plan_execute_arm(place_joints, "place"):
                 return False
 
+            # Gently lower so the part is set down, not dropped, on release.
+            self._lower_onto_table(place_joints, "place-lower")
+
             # Open gripper
             open_joints = self.waypoints.get("poses", {}).get(self.open_gripper_pose)
             if not self.motion.plan_execute_gripper(open_joints, "openAfterPlace"):
+                return False
+
+            # Leave the part on the table where it was released (was missing
+            # here, so dismantle never actually let go of the object).
+            if not self.scene.detach_object(obj, "end_effector_link"):
+                self.node.get_logger().error(f"❌ detach_object failed for '{obj}'")
                 return False
 
             # Retreat
@@ -182,9 +236,31 @@ class SkillHandlers:
             if "joints" in place_in and place_in["joints"]:
                 return place_in["joints"]
 
-        # From object's default place
+        # IK-computed from cartesian_hints.place_position, mirroring
+        # _resolve_approach: the static 'place' joint array below was hand-
+        # tuned once and isn't where cartesian_hints.place_position actually
+        # is, so going there in joint space (direct execution, no Cartesian
+        # path planning) can swing the arm through a big, unrelated arc.
+        # Solving IK for the real place position keeps the motion comparable
+        # in size/shape to the approach move.
         if object_name in self.waypoints.get("objects", {}):
             obj_data = self.waypoints["objects"][object_name]
+            hint = obj_data.get("cartesian_hints", {}).get("place_position")
+            strategy = obj_data.get("approach_strategy")
+            orientation = APPROACH_ORIENTATIONS.get(strategy)
+            if hint and orientation:
+                target = (hint["x"], hint["y"], hint["z"] + GRIPPER_GRASP_REACH)
+                seed = self.waypoints.get("poses", {}).get("HOME") or obj_data.get("approach")
+                joints = self.motion.compute_ik(target, orientation, seed_joints=seed)
+                if joints:
+                    self.node.get_logger().info(
+                        f"🧮 IK place for '{object_name}': target@"
+                        f"({target[0]:.3f},{target[1]:.3f},{target[2]:.3f})")
+                    return joints
+                self.node.get_logger().warn(
+                    f"⚠️  IK failed for '{object_name}' place; falling back to static joints")
+
+            # From object's default place
             if "place" in obj_data and isinstance(obj_data["place"], list):
                 return obj_data["place"]
 

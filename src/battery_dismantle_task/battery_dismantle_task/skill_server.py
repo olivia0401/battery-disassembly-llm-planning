@@ -119,8 +119,13 @@ class SkillServer(Node):
         )
         self.get_logger().info("✅ Controller action clients created.")
 
+        # Shares the action ReentrantCallbackGroup so its response can be
+        # processed on another thread while attach/detach blocks waiting for
+        # the future (a MutuallyExclusive group would deadlock here too, same
+        # reasoning as the IK client below).
         self._planning_scene_client = self.create_client(
-            ApplyPlanningScene, '/apply_planning_scene'
+            ApplyPlanningScene, '/apply_planning_scene',
+            callback_group=self._action_callback_group
         )
         self.get_logger().info("✅ Planning scene client created.")
 

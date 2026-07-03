@@ -333,46 +333,10 @@ class VisualStateManager(Node):
         self.get_logger().info(f"  ✅ {object_id} 标记为已抓取（将跟随夹爪）")
 
     def detach_object_visual(self, object_id):
-        """可视化：物体被放置（在目标位置重新创建）"""
-        # 先移除跟随的临时物体
-        req = ApplyPlanningScene.Request()
-        req.scene = PlanningScene()
-        req.scene.is_diff = True
-
-        temp_obj = CollisionObject()
-        temp_obj.id = f"{object_id}_attached"
-        temp_obj.operation = CollisionObject.REMOVE
-        req.scene.world.collision_objects.append(temp_obj)
-
-        self.scene_client.call_async(req)
-
-        # 在目标位置重新创建物体
-        if object_id not in self.object_definitions:
-            self.get_logger().warn(f"未定义 {object_id} 的放置位置")
-            self.grasped_object = None
-            return
-
-        req2 = ApplyPlanningScene.Request()
-        req2.scene = PlanningScene()
-        req2.scene.is_diff = True
-
-        # 在放置位置创建物体
-        placed_obj = self.create_collision_object(
-            object_id,
-            self.object_definitions[object_id]['dimensions'],
-            self.object_definitions[object_id]['place_pose']
-        )
-        req2.scene.world.collision_objects.append(placed_obj)
-
-        # 调用服务
-        future = self.scene_client.call_async(req2)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=1.0)
-
-        if future.result() and future.result().success:
-            self.get_logger().info(f"  ✅ {object_id} 已放置到目标位置")
-            self.grasped_object = None
-        else:
-            self.get_logger().warn(f"  ⚠️ 无法放置 {object_id}")
+        """放置由 scene_manager.detach_object 处理 (把零件留在夹爪松开处的桌面上)。
+        这里不再在固定点重建物体——那正是之前"零件瞬移到地面"的来源。仅清状态。"""
+        self.get_logger().info(f"  ✅ {object_id} 放置由 scene_manager 处理 (留在夹爪松开处)")
+        self.grasped_object = None
 
     def update_attached_object(self):
         """定时更新：让抓取的物体跟随夹爪移动"""
