@@ -21,18 +21,19 @@ LLM robotics demos often look successful when they only check JSON validity or r
 
 ## What this is
 
-- A **Gradio web UI** → **LLM planner** (Llama-3.2, via OpenRouter/Ollama) → **skill dispatcher** → **ROS 2 / MoveIt 2** pipeline that plans and executes battery-disassembly tasks on a 9-DOF Kinova Gen3 + Robotiq-85 gripper.
-- An **evaluation framework** (`experiments/`) that scores plan correctness, safety-validation effectiveness, and robustness across 2,278 simulation trials plus ~1,500 perception-noise robustness trials.
+- A **Gradio web UI** → **LLM planner** (GPT-4o-mini via OpenAI, or Llama-3.2 via OpenRouter/Ollama) → **skill dispatcher** → **ROS 2 / MoveIt 2** pipeline that plans and executes battery-disassembly tasks on a 9-DOF Kinova Gen3 + Robotiq-85 gripper.
+- An **evaluation framework** (`experiments/`) spanning 5 research questions: component ablation, safety-validation effectiveness, RAG memory sensitivity, perception-noise robustness, and — the one that actually closes the loop — sending generated plans into the live ROS 2/MoveIt stack instead of only scoring them as text.
 
 ## Key results
 
 | Finding | Detail |
 |---|---|
-| **Schema validation catches ~14% of real errors** | Most plan failures are semantic (wrong object, wrong step order), not malformed JSON — a pure format-checker misses most of what actually goes wrong. 95% CI: [7.3%, 25.3%]. |
-| **Statistical re-evaluation prevented overclaiming** | After paired tests and Holm-Bonferroni correction, RAG and the validation layer showed directional but not statistically significant improvements. This changed the project conclusion from "RAG helps" to a more defensible reliability finding. |
-| **MoveIt dynamic planning fixed and verified** | Diagnosed and fixed 5 ROS 2 / MoveIt 2 integration bugs, moving the system from pre-baked trajectory replay to verified RRTConnect planning and trajectory execution. Full diagnosis in `REVISION_MEMO.md` §8. |
-| **Perception-noise robustness boundary** | Grasp success collapses from 97.1% to 45.1% as simulated pose-estimation error grows from 5mm to 10mm — quantifies how much perception accuracy this system actually needs. |
-| **0 → 48 automated tests** | The codebase had zero test coverage before this work; added 48 unit tests for the scoring functions, statistics (Wilson CI, McNemar, Holm-Bonferroni, Cohen's κ), and the ROS2-independent skill-handler logic. |
+| **RAG measurably improves planning accuracy** | Exact-match plan correctness rises from 44.1% (LLM only) to 52.9% (LLM+RAG), paired-significance p<0.001 — with a corrected ground truth (see below) this holds up, it isn't just noise. |
+| **Two-tier validation catches roughly 12–33% of unsafe requests, not most of them** | Measured two independent ways: text-level validator recall (12.4%, [7.4%,20.0%]) and a real-execution probe that sent unvalidated hallucinated plans straight to the live ROS 2 skill server (3/9 caught, [12.1%,64.6%]). Both agree the two-tier check reliably catches format/vocabulary errors but misses semantically-wrong-but-structurally-valid actions (e.g. "disconnect the BMS connector" executed as grasp-then-disconnect on the battery box instead). |
+| **A ground-truth bug was found and fixed, not just the model** | 9 of 34 reference plans required a position/object with no real joint-angle or scene definition anywhere in the codebase — verified by cross-checking `waypoints.json` and `visual_state_manager.py` line by line. Fixing the labels (not the robot) changed the ablation study's headline numbers. |
+| **Real ROS 2 execution now closes the loop** | RQ5 sends the same plans RQ1 scores as text into the live MoveIt stack: 17/18 achievable commands executed successfully regardless of whether the plan came from the validated or unvalidated configuration — the one structural failure (a "visually inspect for damage" command) fails for every plan source because there's no camera, not because of plan quality. |
+| **Perception-noise robustness boundary** | Grasp success collapses from 97.1% to 45.1% as simulated pose-estimation error grows from 5mm to 10mm — an exploratory geometric simulation, not a claim about real camera hardware, but it quantifies how much perception accuracy this system would need. |
+| **0 → 48 automated tests, plus a data-integrity bug fixed mid-project** | Added 48 unit tests for the scoring functions and statistics (Wilson CI, McNemar, Holm-Bonferroni, Cohen's κ). Also found and fixed a resume-logic bug where a failed LLM call that silently fell back to a non-LLM demo plan was being marked "done" instead of retried — a class of bug that permanently and invisibly corrupts a dataset if it isn't caught. |
 
 `REVISION_MEMO.md` is a full self-audit log: every place an earlier draft of this work overclaimed, what was found on re-checking, and what was fixed. It's kept because the corrections are more informative than a clean narrative would be.
 
@@ -62,7 +63,7 @@ ROS 2 Control → robot execution
 
 ## Tech stack
 
-ROS 2 Humble, MoveIt 2, Kinova Gen3 / Kortex, Robotiq-85 gripper, Llama-3.2 (OpenRouter / Ollama), ChromaDB, sentence-transformers, Gradio, pytest, pandas/statsmodels (evaluation).
+ROS 2 Humble, MoveIt 2, Kinova Gen3 / Kortex, Robotiq-85 gripper, GPT-4o-mini (OpenAI) / Llama-3.2 (OpenRouter / Ollama), ChromaDB, sentence-transformers, Gradio, pytest, pandas/statsmodels (evaluation).
 
 ## Repository structure
 
@@ -72,9 +73,10 @@ ROS 2 Humble, MoveIt 2, Kinova Gen3 / Kortex, Robotiq-85 gripper, Llama-3.2 (Ope
 │   │                              #   planning-scene manager, MoveIt config, URDF
 │   └── llm_agent/                 # LLM planner, RAG engine (ChromaDB), executor,
 │                                   #   validator, Gradio web UI
-├── experiments/                   # Evaluation pipeline: plan scoring, statistics
-│   └── eval/                      #   (Wilson CI / McNemar / Holm-Bonferroni / noise
-│                                   #   floor), RQ1-RQ4 runners, Excel report builder
+├── experiments/                   # Evaluation pipeline: RQ1 ablation, RQ2 safety
+│   └── eval/                      #   validation, RQ3 memory sweep, RQ4 perception-noise
+│                                   #   sim, RQ5 real ROS2/MoveIt execution + defense
+│                                   #   probe; stats (Wilson CI/McNemar/Holm-Bonferroni)
 ├── REVISION_MEMO.md               # Self-audit log of corrected claims
 ├── PROJECT_STRUCTURE.md           # Detailed module-by-module breakdown
 └── FINAL_START.sh                 # Full-system launch script
@@ -82,7 +84,7 @@ ROS 2 Humble, MoveIt 2, Kinova Gen3 / Kortex, Robotiq-85 gripper, Llama-3.2 (Ope
 
 ## Reproducibility / running it
 
-### 1. Evaluation pipeline (no ROS2/LLM required)
+### 1. Evaluation pipeline (no ROS2 required for RQ1-4)
 
 ```bash
 cd experiments
@@ -92,31 +94,40 @@ python -m eval.analyze
 python -m eval.build_workbook                                      # -> eval/Result_robot.xlsx
 ```
 
-RQ1–RQ3 call the LLM planner directly in Python (no ROS2 needed) but do require an LLM backend. The combined leak-free runner supports both Ollama (local) and OpenRouter (cloud):
+RQ1–RQ3 call the LLM planner directly in Python (no ROS2 needed) but do require an LLM backend — OpenAI, or Ollama/OpenRouter for free/local:
 
 ```bash
 cd experiments
-python run_fast.py --rq all --leakfree --trials 5 --backend ollama --concurrency 1
-# or: --backend openrouter (uses OPENROUTER_API_KEY from src/llm_agent/.env)
+python run_fast.py --rq all --leakfree --trials 5 --backend openai --concurrency 4
+# or: --backend ollama (free/local, much slower) / --backend openrouter
 ```
 
-Individual RQ scripts (`run_rq1_safety.py`, `run_rq2_memory.py`, `run_rq3_ablation.py`) are also runnable directly — see `--help` on each for their `--commands`/`--trials`/`--resume` options.
+RQ5 needs a live ROS 2 stack and sends the plans RQ1 generated straight to it:
+
+```bash
+source /opt/ros/humble/setup.bash && source install/setup.bash
+python run_rq5_real_execution.py                     # should_pass: validated vs unvalidated vs reference
+python run_rq5_real_execution.py --sources defense   # defense-in-depth probe
+```
+
+The older per-RQ scripts (`run_rq1_ablation.py`, `run_rq2_safety.py`, `run_rq3_memory.py`) still work standalone — see `--help` on each — but `run_fast.py` is faster (shares one plan-generation pass across RQ1/RQ2) and is what generates the data RQ5 consumes.
 
 ### 2. Full ROS 2 system
 
-Requirements: Ubuntu 22.04 or WSL2, ROS 2 Humble, MoveIt 2, Python 3.x, and an Ollama install or OpenRouter API key.
+Requirements: Ubuntu 22.04 or WSL2, ROS 2 Humble, MoveIt 2, Python 3.x, and an OpenAI/OpenRouter API key or an Ollama install.
 
 ```bash
-cp src/llm_agent/.env.example src/llm_agent/.env   # add your OPENROUTER_API_KEY
+cp src/llm_agent/.env.example src/llm_agent/.env   # add your API key
 bash FINAL_START.sh
 # then open http://localhost:7862
 ```
 
 ## Known limitations
 
-- RQ1–RQ3 trials currently use a small local model with 1–2 trials per command; more trials would tighten the noise-floor estimates.
+- RQ5 executes each command once per plan source rather than repeated trials, so its success-rate confidence intervals are wide (e.g. [74%,99%] for 17/18) — real motion planning (RRTConnect) has some run-to-run variance this doesn't capture.
 - `motion_executor.py` and `skill_server.py` import `rclpy`/`moveit_msgs` at module level, so they're exercised through the live ROS 2 run described above rather than unit-tested in isolation.
-- RQ4's perception-noise analysis is a geometric simulation (no camera, no physics engine), not a camera/grasp-force test on real hardware.
+- RQ4's perception-noise analysis is an exploratory geometric simulation (no camera, no physics engine), not a camera/grasp-force test on real hardware.
+- Every result row records the exact model id and an ISO timestamp — cite the timestamp when quoting numbers, since a cloud provider's model alias can change behavior without a version bump.
 
 ## License
 
