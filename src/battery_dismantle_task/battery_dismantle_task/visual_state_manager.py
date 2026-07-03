@@ -72,38 +72,40 @@ class VisualStateManager(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        # 物体尺寸定义（与publish_scene.py保持一致）
+        # 物体尺寸定义
+        # 尺寸按 Robotiq-85 (最大开口约 85mm) 可实际夹持来设计:
+        # 电池包是固定工件(不被抓取), 顶部的小盖块 (5cm) 才是抓取目标。
         BATTERY_BASE_X = 0.45
         BATTERY_BASE_Y = 0.0
         BATTERY_BASE_Z = 0.0
-        BATTERY_HEIGHT = 0.08
-        COVER_THICKNESS = 0.01
+        BATTERY_W, BATTERY_D, BATTERY_H = 0.16, 0.12, 0.05   # 电池包(工件)
+        COVER_W, COVER_D, COVER_H = 0.05, 0.05, 0.03         # 可抓取的小盖块
 
         self.object_definitions = {
             'TopCoverBolts': {
-                'dimensions': [0.36, 0.26, 0.01],  # 顶盖
+                'dimensions': [COVER_W, COVER_D, COVER_H],  # 小盖块(抓取目标)
                 'initial_pose': {
                     'x': BATTERY_BASE_X,
                     'y': BATTERY_BASE_Y,
-                    'z': BATTERY_BASE_Z + BATTERY_HEIGHT - COVER_THICKNESS/2
+                    'z': BATTERY_BASE_Z + BATTERY_H + COVER_H/2  # 坐在电池顶面上
                 },
                 'place_pose': {
                     'x': 0.3,
                     'y': -0.4,
-                    'z': 0.005  # 托盘位置
+                    'z': COVER_H/2  # 托盘位置
                 }
             },
             'BatteryBox_0': {
-                'dimensions': [0.35, 0.25, 0.08],  # 电池主体
+                'dimensions': [BATTERY_W, BATTERY_D, BATTERY_H],  # 电池包(工件)
                 'initial_pose': {
                     'x': BATTERY_BASE_X,
                     'y': BATTERY_BASE_Y,
-                    'z': BATTERY_BASE_Z + 0.04  # 中心点
+                    'z': BATTERY_BASE_Z + BATTERY_H/2  # 中心点
                 },
                 'place_pose': {
                     'x': 0.3,
                     'y': 0.4,
-                    'z': 0.04  # 回收箱位置
+                    'z': BATTERY_H/2  # 回收箱位置
                 }
             }
         }

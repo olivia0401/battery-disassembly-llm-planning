@@ -4,11 +4,16 @@
 import time
 import threading
 from moveit_msgs.action import MoveGroup
-from moveit_msgs.msg import Constraints, JointConstraint, MotionPlanRequest,  RobotState
+from moveit_msgs.msg import (Constraints, JointConstraint, MotionPlanRequest, RobotState,
+                             PositionIKRequest, PlanningSceneComponents)
+from moveit_msgs.srv import GetPositionIK, GetPlanningScene
 from sensor_msgs.msg import JointState
+from geometry_msgs.msg import PoseStamped
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from builtin_interfaces.msg import Duration
+
+ARM_JOINT_NAMES = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6", "joint_7"]
 from .motion_config import (
     DEFAULT_VELOCITY_SCALE,
     DEFAULT_ACCELERATION_SCALE,
@@ -32,7 +37,21 @@ class MotionExecutor:
         self.manipulator_group_name = "manipulator"
         self.vel_scale = DEFAULT_VELOCITY_SCALE
         self.acc_scale = DEFAULT_ACCELERATION_SCALE
-        self.use_direct_execution = False  # Method 6: Use direct trajectory execution (GitHub method)
+        # Direct joint-space execution (linear interpolation current->target),
+        # bypassing OMPL/RRTConnect. Enabled because RRTConnect produced wildly
+        # indirect paths for near-target moves (measured ~70x redundant joint
+        # travel: tiny net change but huge back-and-forth excursions), which is
+        # what looked like the arm "moving back and forth" in RViz. The demo
+        # scene is simple (approach from above, ACM allows gripper-object
+        # contact), so direct moves are clean and safe here.
+        self.use_direct_execution = True  # Method 6: direct trajectory execution
+        # IK service client; injected by skill_server (must share the action
+        # ReentrantCallbackGroup so its response can be processed while a
+        # command-callback worker thread is blocked on the IK future).
+        self.ik_client = None
+        # Planning-scene query client (same ReentrantCallbackGroup rationale);
+        # lets approach poses be derived from where an object ACTUALLY is.
+        self.scene_query_client = None
 
     def plan_execute_arm(self, joints, where):
         """Plan and execute arm motion to target joint positions"""
@@ -90,6 +109,109 @@ class MotionExecutor:
             return False
 
         return True
+
+    def compute_ik(self, position, orientation, seed_joints=None,
+                   ik_link="end_effector_link", frame="world", timeout_s=2.0):
+        """Compute arm joint values for an end-effector pose via MoveIt /compute_ik.
+
+        position: (x, y, z) in `frame`. orientation: (x, y, z, w) quaternion.
+        Returns a 7-element list [joint_1..joint_7] on success, or None on
+        failure (service missing, unreachable pose, or timeout). Lets the
+        approach pose be derived from an object's Cartesian position at runtime
+        instead of a hardcoded joint array.
+        """
+        if self.ik_client is None:
+            self.node.get_logger().warn("compute_ik: no IK client injected")
+            return None
+        if not self.ik_client.service_is_ready() and not self.ik_client.wait_for_service(timeout_sec=3.0):
+            self.node.get_logger().warn("compute_ik: /compute_ik service unavailable")
+            return None
+
+        req = GetPositionIK.Request()
+        ik_req = PositionIKRequest()
+        ik_req.group_name = self.manipulator_group_name
+        ik_req.ik_link_name = ik_link
+        ik_req.avoid_collisions = False
+        ik_req.timeout = Duration(sec=int(timeout_s), nanosec=int((timeout_s % 1) * 1e9))
+
+        ps = PoseStamped()
+        ps.header.frame_id = frame
+        ps.pose.position.x, ps.pose.position.y, ps.pose.position.z = (float(v) for v in position)
+        (ps.pose.orientation.x, ps.pose.orientation.y,
+         ps.pose.orientation.z, ps.pose.orientation.w) = (float(v) for v in orientation)
+        ik_req.pose_stamped = ps
+
+        if seed_joints:
+            rs = RobotState()
+            js = JointState()
+            js.name = list(ARM_JOINT_NAMES)
+            js.position = [float(v) for v in seed_joints]
+            rs.joint_state = js
+            ik_req.robot_state = rs
+
+        req.ik_request = ik_req
+
+        # Block on the future via a timed poll (NOT spin_once — see the
+        # nested-spin note in plan_execute_arm). The IK client shares the
+        # action ReentrantCallbackGroup, so the background MultiThreadedExecutor
+        # completes this future on another thread while we wait here.
+        future = self.ik_client.call_async(req)
+        start = time.time()
+        while not future.done():
+            if time.time() - start > 6.0:
+                self.node.get_logger().warn("compute_ik: timed out waiting for IK result")
+                return None
+            time.sleep(0.01)
+
+        res = future.result()
+        if res is None or res.error_code.val != 1:
+            code = None if res is None else res.error_code.val
+            self.node.get_logger().warn(f"compute_ik: no solution (error_code={code})")
+            return None
+
+        name_to_pos = dict(zip(res.solution.joint_state.name, res.solution.joint_state.position))
+        return [name_to_pos.get(j, 0.0) for j in ARM_JOINT_NAMES]
+
+    def get_object_pose(self, object_id):
+        """Look up a world collision object's pose + box dimensions from the
+        live planning scene.
+
+        Returns ((x, y, z), [dim_x, dim_y, dim_z]) for the object's reference
+        pose, or None if the scene is unavailable or the object/geometry isn't
+        found. This is the ground truth for where an object actually is in
+        RViz, so approach poses computed from it stay aligned with what's
+        rendered instead of a hardcoded hint.
+        """
+        if self.scene_query_client is None:
+            self.node.get_logger().warn("get_object_pose: no scene query client injected")
+            return None
+        if (not self.scene_query_client.service_is_ready()
+                and not self.scene_query_client.wait_for_service(timeout_sec=3.0)):
+            self.node.get_logger().warn("get_object_pose: /get_planning_scene unavailable")
+            return None
+
+        req = GetPlanningScene.Request()
+        req.components.components = (
+            PlanningSceneComponents.WORLD_OBJECT_GEOMETRY |
+            PlanningSceneComponents.WORLD_OBJECT_NAMES
+        )
+        future = self.scene_query_client.call_async(req)
+        start = time.time()
+        while not future.done():
+            if time.time() - start > 5.0:
+                self.node.get_logger().warn("get_object_pose: timed out querying scene")
+                return None
+            time.sleep(0.01)
+
+        res = future.result()
+        if res is None:
+            return None
+        for co in res.scene.world.collision_objects:
+            if co.id == object_id:
+                p = co.pose.position
+                dims = list(co.primitives[0].dimensions) if co.primitives else None
+                return (p.x, p.y, p.z), dims
+        return None
 
     def _wait_for_planning_result(self, move_goal):
         """Send goal and wait for MoveGroup planning result"""
@@ -298,9 +420,50 @@ class MotionExecutor:
             return False
 
     def plan_execute_gripper(self, joints, where):
-        """Execute gripper motion"""
+        """Actuate the gripper to a target opening via the fake gripper controller.
+
+        `joints[0]` drives robotiq_85_left_knuckle_joint (the single actuated
+        joint; the other finger joints mimic it in the URDF), e.g. OPEN=0.1,
+        CLOSE=0.8 from config/waypoints.json. Previously this was a no-op sleep,
+        so the fingers never visibly moved; now they actually open/close.
+        """
         self.node.get_logger().info(f"🚀 Executing gripper motion for: {where}")
-        self.node.get_logger().info(f"🤏 Simulating gripper motion to: {joints[0]:.3f}")
-        time.sleep(1.5)
-        self.node.get_logger().info(f"✅ Gripper motion '{where}' completed.")
+        if not joints:
+            self.node.get_logger().warn("gripper: no target position given")
+            return False
+        target = float(joints[0])
+
+        if self._gripper_controller_client is None:
+            self.node.get_logger().warn("gripper: no controller client; skipping")
+            time.sleep(1.0)
+            return True
+
+        traj = JointTrajectory()
+        traj.joint_names = ["robotiq_85_left_knuckle_joint"]
+        point = JointTrajectoryPoint()
+        point.positions = [target]
+        point.time_from_start = Duration(sec=1, nanosec=0)
+        traj.points.append(point)
+        goal = FollowJointTrajectory.Goal()
+        goal.trajectory = traj
+
+        send_future = self._gripper_controller_client.send_goal_async(goal)
+        start = time.time()
+        while not send_future.done():
+            if time.time() - start > 5.0:
+                self.node.get_logger().warn("gripper: controller did not accept goal in time")
+                return False
+            time.sleep(0.01)
+        handle = send_future.result()
+        if not handle.accepted:
+            self.node.get_logger().warn("gripper: goal rejected by controller")
+            return False
+
+        result_future = handle.get_result_async()
+        start = time.time()
+        while not result_future.done():
+            if time.time() - start > 4.0:
+                break  # don't fail the skill on a slow gripper result
+            time.sleep(0.01)
+        self.node.get_logger().info(f"✅ Gripper '{where}' -> {target:.2f}")
         return True

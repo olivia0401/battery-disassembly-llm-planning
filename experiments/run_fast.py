@@ -8,10 +8,10 @@ Speed-ups vs the original per-RQ scripts
    instead of strictly serial. With ~8 s/call this is the dominant ~Nx win
    (1200 serial calls ~3 h  ->  ~15-25 min at concurrency 8).
 2. SHARED PLANNERS: the SentenceTransformer + ChromaDB are loaded ONCE per
-   config, not once per trial (the old RQ2 re-loaded them every single trial).
+   config, not once per trial (the old RQ3 re-loaded them every single trial).
 3. PLAN REUSE: a plan is generated ONCE per (command, trial) and then scored by
-   all validation levels (RQ1) / reused across LO+LV and LR+FS (RQ3). This cuts
-   RQ1 from 700 LLM calls to 175, and RQ3 from 525 to 350.
+   all validation levels (RQ2) / reused across LO+LV and LR+FS (RQ1). This cuts
+   RQ2 from 700 LLM calls to 175, and RQ1 from 525 to 350.
 4. RESUME: every result is appended to a JSONL; re-running skips completed keys,
    so a crash never costs more than the in-flight batch.
 5. HONEST PROVENANCE: model id, backend, per-trial seed and leak-free flag are
@@ -105,17 +105,56 @@ class JsonlSink:
         self.fh.close()
 
 
-async def gen_plan(planner: Planner, command: str, sem: asyncio.Semaphore) -> Dict[str, Any]:
+class CallBudget:
+    """Simple call-count circuit breaker. This codebase has no per-token cost
+    tracking anywhere (unlike a metered-API setup), so a hard call-count cap
+    is the cheapest safety net against a runaway/looping full-scale run --
+    not a precise USD budget, just a "stop after N calls" kill switch."""
+    def __init__(self, cap: Optional[int]):
+        self.cap = cap
+        self.used = 0
+
+    def try_acquire(self) -> bool:
+        if self.cap is not None and self.used >= self.cap:
+            return False
+        self.used += 1
+        return True
+
+
+async def gen_plan(planner: Planner, command: str, sem: asyncio.Semaphore,
+                    budget: Optional[CallBudget] = None) -> Dict[str, Any]:
     """Generate one plan under the concurrency limiter; returns plan + timing."""
+    if budget is not None and not budget.try_acquire():
+        return {"plan": [], "ok": False, "planning_time": 0.0,
+                "planner_mode": "budget_exceeded",
+                "error": f"call budget ({budget.cap}) reached", "k_returned": 0, "max_sim": 0.0}
     async with sem:
         t0 = time.time()
         try:
             res = await planner.plan(command, use_llm=True)
             plan = res.get("plan", [])
             meta = res.get("meta", {})
+            mode = meta.get("planner_mode", "?")
+            # Planner.plan() NEVER lets an LLM/API exception propagate -- it
+            # catches everything internally (rate limits, timeouts, invalid
+            # JSON, quota exhaustion, ...) and returns normally with
+            # planner_mode="fallback_demo" + meta["error"] set. So this
+            # function's own try/except above never actually fires for those
+            # cases; from here it looks identical to a successful call. That
+            # silently wrote fallback (non-LLM) plans into the dataset,
+            # permanently marked "done", when e.g. OpenRouter's free-tier
+            # daily quota was exhausted mid-run -- confirmed live during a
+            # 2026-07-01 run. Treat fallback_demo as a failed attempt so it's
+            # retried once the underlying issue (quota reset, rate limit,
+            # transient bad output) clears, instead of being recorded as if
+            # the model had actually been consulted.
+            if mode == "fallback_demo":
+                return {"plan": [], "ok": False, "planning_time": time.time() - t0,
+                        "planner_mode": mode, "error": meta.get("error", "fallback_demo"),
+                        "k_returned": 0, "max_sim": 0.0}
             return {"plan": plan, "ok": True,
                     "planning_time": time.time() - t0,
-                    "planner_mode": meta.get("planner_mode", "?"),
+                    "planner_mode": mode,
                     "k_returned": meta.get("retrieval", {}).get("k_returned", 0),
                     "max_sim": max(meta.get("retrieval", {}).get("similarities", [0.0]) or [0.0])}
         except Exception as e:
@@ -123,12 +162,13 @@ async def gen_plan(planner: Planner, command: str, sem: asyncio.Semaphore) -> Di
                     "planner_mode": "error", "error": str(e), "k_returned": 0, "max_sim": 0.0}
 
 
-# ---------------------------------------------------------------- RQ3 + RQ1 (share generated plans)
-async def run_planning_matrix(commands, trials, concurrency, leakfree, prompt_name, backend="openrouter"):
+# ---------------------------------------------------------------- RQ1 + RQ2 (share generated plans)
+async def run_planning_matrix(commands, trials, concurrency, leakfree, prompt_name, backend="openrouter",
+                               budget: Optional[CallBudget] = None):
     """Generate plans for every (command, trial) with and without RAG, ONCE.
 
     Returns dicts keyed by (command, trial) -> {'norag': planrow, 'rag': planrow}.
-    These feed both RQ3 (configs) and RQ1 (validation levels) without re-calling
+    These feed both RQ1 (configs) and RQ2 (validation levels) without re-calling
     the LLM per config/level.
     """
     sem = asyncio.Semaphore(concurrency)
@@ -146,7 +186,7 @@ async def run_planning_matrix(commands, trials, concurrency, leakfree, prompt_na
             jobs.append((c, t))
 
     async def one(c, t, planner, tag):
-        r = await gen_plan(planner, c["command"], sem)
+        r = await gen_plan(planner, c["command"], sem, budget)
         r.update({"command": c["command"], "category": c["category"], "trial": t, "tag": tag})
         return r
 
@@ -180,20 +220,32 @@ class ScriptedBaseline:
         return []
 
 
-def write_rq3(bucket, validator, sink, mid_norag, mid_rag, leakfree):
-    """SB scripted + LO/LV(reuse norag) + LR/FS(reuse rag), no extra LLM calls."""
+def write_rq1(bucket, validator, sink, mid_norag, mid_rag, leakfree):
+    """SB scripted + LO/LV(reuse norag) + LR/FS(reuse rag), no extra LLM calls.
+
+    Rows whose source plan generation failed (pr["ok"] is False -- a rate
+    limit, timeout, or other API error, NOT a legitimate empty plan) are
+    skipped instead of written. Writing them would mark that _key "done" in
+    the JsonlSink forever, so the failed call silently disappears from the
+    dataset on the next run instead of being retried -- N would shrink
+    unevenly across configs with no visible signal.
+    """
     sb = ScriptedBaseline()
     ts = datetime.now().isoformat()
+    skipped = 0
     for (cmd, trial), b in bucket.items():
         cat = (b.get("rag") or b.get("norag"))["category"]
         # configs that reuse the no-RAG plan
         for cfg, src in [("LO", "norag"), ("LV", "norag"), ("LR", "rag"), ("FS", "rag")]:
             pr = b.get(src, {})
+            if not pr.get("ok", True):
+                skipped += 1
+                continue
             plan = pr.get("plan", [])
             apply_val = cfg in ("LV", "FS")
             valid, _ = (validator.validate_plan({"plan": plan}) if (apply_val and plan) else (bool(plan), []))
             row_model = mid_rag if src == "rag" else mid_norag
-            row = {"_key": f"rq3|{cfg}|{cmd}|{trial}|{model_tag(row_model)}", "rq": 3, "configuration": cfg,
+            row = {"_key": f"rq1|{cfg}|{cmd}|{trial}|{model_tag(row_model)}", "rq": 3, "configuration": cfg,
                    "command": cmd, "category": cat, "trial_id": trial,
                    "planned_skills": plan, "plan_valid": bool(valid),
                    "planning_time": pr.get("planning_time", 0.0),
@@ -204,45 +256,65 @@ def write_rq3(bucket, validator, sink, mid_norag, mid_rag, leakfree):
                 sink.write(row)
         # scripted baseline (no LLM involved, but keep a stable tag for consistency)
         plan = sb.plan(cmd)
-        row = {"_key": f"rq3|SB|{cmd}|{trial}|scripted", "rq": 3, "configuration": "SB",
+        row = {"_key": f"rq1|SB|{cmd}|{trial}|scripted", "rq": 3, "configuration": "SB",
                "command": cmd, "category": cat, "trial_id": trial,
                "planned_skills": plan, "plan_valid": bool(plan),
                "planning_time": 0.0, "model": "scripted", "leakfree": leakfree, "timestamp": ts}
         if not sink.has(row["_key"]):
             sink.write(row)
+    if skipped:
+        print(f"RQ1: skipped {skipped} rows from failed plan generation "
+              f"(will retry on next run, not marked done)")
 
 
-def write_rq1(bucket, validator, sink, mid_rag, leakfree):
-    """4 validation levels applied to the SAME RAG plan (reuse, no LLM re-calls)."""
-    from run_rq1_safety import SchemaOnlyValidation, RuleBasedValidation, FullValidationWrapper, NoValidation
+def write_rq2(bucket, validator, sink, mid_rag, leakfree):
+    """4 validation levels applied to the SAME RAG plan (reuse, no LLM re-calls).
+
+    Skips all 4 levels for a (cmd, trial) when its source plan generation
+    failed (pr["ok"] is False) -- see write_rq1 docstring for why this must
+    NOT be written as done.
+    """
+    from run_rq2_safety import SchemaOnlyValidation, RuleBasedValidation, FullValidationWrapper, NoValidation
     levels = {"NV": NoValidation(),
               "SV": SchemaOnlyValidation(str(SRC / "config" / "skills.json")),
               "RV": RuleBasedValidation(validator),
               "FV": FullValidationWrapper(validator)}
     ts = datetime.now().isoformat()
+    skipped = 0
     for (cmd, trial), b in bucket.items():
         pr = b.get("rag", {})
+        if not pr.get("ok", True):
+            skipped += 1
+            continue
         plan = pr.get("plan", [])
         cat = pr.get("category", "")
         for lvl, v in levels.items():
             res = v.validate(plan)
-            row = {"_key": f"rq1|{lvl}|{cmd}|{trial}|{model_tag(mid_rag)}", "rq": 1, "validation_level": lvl,
+            row = {"_key": f"rq2|{lvl}|{cmd}|{trial}|{model_tag(mid_rag)}", "rq": 1, "validation_level": lvl,
                    "command": cmd, "category": cat, "trial_id": trial,
                    "planned_skills": plan, "plan_valid": bool(res.get("valid", False)),
                    "validation_time": 0.0,
                    "planner_mode": pr.get("planner_mode", "?"), "model": mid_rag, "leakfree": leakfree, "timestamp": ts}
             if not sink.has(row["_key"]):
                 sink.write(row)
+    if skipped:
+        print(f"RQ2: skipped {skipped} trials (x4 levels) from failed plan generation "
+              f"(will retry on next run, not marked done)")
 
 
-# ---------------------------------------------------------------- RQ2 memory
-def _rq2_row_from_bucket(k, c, t, pr, validator, mid, leakfree, ts, is_rag):
-    """Build an RQ2 row by REUSING a plan already generated in the planning matrix
-    (k=0 reuses the no-RAG plan; k=max reuses the full-RAG plan) -> no extra LLM call."""
+# ---------------------------------------------------------------- RQ3 memory
+def _rq3_row_from_bucket(k, c, t, pr, validator, mid, leakfree, ts, is_rag):
+    """Build an RQ3 row by REUSING a plan already generated in the planning matrix
+    (k=0 reuses the no-RAG plan; k=max reuses the full-RAG plan) -> no extra LLM call.
+
+    Returns None if the source plan generation failed (pr["ok"] is False) --
+    caller must skip writing in that case (see write_rq1 docstring)."""
+    if not pr.get("ok", True):
+        return None
     plan = pr.get("plan", [])
     valid, _ = validator.validate_plan({"plan": plan}) if plan else (False, [])
     max_sim = float(pr.get("max_sim", 0.0)) if is_rag else 0.0
-    return {"_key": f"rq2|{k}|{c['command']}|{t}|{model_tag(mid)}", "rq": 2, "memory_size": k,
+    return {"_key": f"rq3|{k}|{c['command']}|{t}|{model_tag(mid)}", "rq": 2, "memory_size": k,
             "command": c["command"], "category": c["category"], "trial_id": t,
             "planned_skills": plan, "plan_valid": bool(valid),
             "planning_time": pr.get("planning_time", 0.0),
@@ -252,10 +324,10 @@ def _rq2_row_from_bucket(k, c, t, pr, validator, mid, leakfree, ts, is_rag):
             "model": mid, "leakfree": leakfree, "timestamp": ts}
 
 
-async def run_rq2(commands, trials, concurrency, sizes, leakfree, backend="openrouter",
-                  reuse_bucket=None, mid_norag="", mid_rag=""):
+async def run_rq3(commands, trials, concurrency, sizes, leakfree, backend="openrouter",
+                  reuse_bucket=None, mid_norag="", mid_rag="", budget: Optional[CallBudget] = None):
     sem = asyncio.Semaphore(concurrency)
-    sink = JsonlSink(RESULTS / "rq2.jsonl")
+    sink = JsonlSink(RESULTS / "rq3.jsonl")
     ts = datetime.now().isoformat()
     validator = Validator(SRC / "config")
     prompt_file = "prompt_clean.txt" if leakfree else "prompt.txt"
@@ -267,6 +339,7 @@ async def run_rq2(commands, trials, concurrency, sizes, leakfree, backend="openr
             tag = "norag" if k == 0 else "rag"
             mid = mid_norag if k == 0 else mid_rag
             n = 0
+            skipped = 0
             for (cmd, trial), b in reuse_bucket.items():
                 if trial > trials:
                     continue
@@ -274,10 +347,16 @@ async def run_rq2(commands, trials, concurrency, sizes, leakfree, backend="openr
                 if pr is None:
                     continue
                 c = {"command": cmd, "category": pr.get("category", "")}
-                row = _rq2_row_from_bucket(k, c, trial, pr, validator, mid, leakfree, ts, k != 0)
+                row = _rq3_row_from_bucket(k, c, trial, pr, validator, mid, leakfree, ts, k != 0)
+                if row is None:
+                    skipped += 1
+                    continue
                 if not sink.has(row["_key"]):
                     sink.write(row); n += 1
-            print(f"RQ2 k={k}: reused {n} plans from planning matrix (0 LLM calls)")
+            msg = f"RQ3 k={k}: reused {n} plans from planning matrix (0 LLM calls)"
+            if skipped:
+                msg += f", skipped {skipped} from failed plan generation (will retry next run)"
+            print(msg)
             continue
         planner = (Planner(config_dir=SRC / "config", backend=backend,
                            enable_rag=False, prompt_file=prompt_file)
@@ -288,10 +367,15 @@ async def run_rq2(commands, trials, concurrency, sizes, leakfree, backend="openr
         mid = model_id(planner)
 
         async def one(c, t):
-            r = await gen_plan(planner, c["command"], sem)
+            r = await gen_plan(planner, c["command"], sem, budget)
+            if not r.get("ok", True):
+                # Infrastructure failure (rate limit/timeout/etc), not a
+                # legitimate empty plan -- skip so it's retried next run
+                # instead of being marked done with no data.
+                return None
             plan = r["plan"]
             valid, _ = validator.validate_plan({"plan": plan}) if plan else (False, [])
-            return {"_key": f"rq2|{k}|{c['command']}|{t}|{model_tag(mid)}", "rq": 2, "memory_size": k,
+            return {"_key": f"rq3|{k}|{c['command']}|{t}|{model_tag(mid)}", "rq": 2, "memory_size": k,
                     "command": c["command"], "category": c["category"], "trial_id": t,
                     "planned_skills": plan, "plan_valid": bool(valid),
                     "planning_time": r["planning_time"], "num_cases_retrieved": r["k_returned"],
@@ -300,10 +384,16 @@ async def run_rq2(commands, trials, concurrency, sizes, leakfree, backend="openr
                     "model": mid, "leakfree": leakfree, "timestamp": ts}
 
         jobs = [one(c, t) for c in commands for t in range(1, trials + 1)
-                if not sink.has(f"rq2|{k}|{c['command']}|{t}|{model_tag(mid)}")]
-        print(f"RQ2 k={k}: {len(jobs)} trials ...")
+                if not sink.has(f"rq3|{k}|{c['command']}|{t}|{model_tag(mid)}")]
+        print(f"RQ3 k={k}: {len(jobs)} trials ...")
+        skipped = 0
         for row in await asyncio.gather(*jobs):
+            if row is None:
+                skipped += 1
+                continue
             sink.write(row)
+        if skipped:
+            print(f"RQ3 k={k}: skipped {skipped} from failed plan generation (will retry next run)")
     sink.close()
 
 
@@ -319,6 +409,11 @@ async def main():
                     help="openrouter | ollama | openai | chutes")
     ap.add_argument("--leakfree", action="store_true",
                     help="use disjoint memory split + leak-free prompt")
+    ap.add_argument("--max-calls", type=int, default=None,
+                    help="Hard cap on total LLM calls this invocation (across RQ1/2/3). "
+                         "No per-token cost tracking exists in this codebase, so this is a "
+                         "call-count circuit breaker, not a USD budget. Calls stopped by the "
+                         "cap are NOT marked done -- they're picked up on the next invocation.")
     args = ap.parse_args()
 
     commands = load_commands(BASE / args.commands)
@@ -328,21 +423,26 @@ async def main():
     if args.leakfree and args.sizes == [0, 10, 20, 35]:
         args.sizes = [0, 5, 10, 15]
 
+    budget = CallBudget(args.max_calls)
+
     bucket = mid_norag = mid_rag = None
-    if args.rq in ("1", "3", "all"):
+    if args.rq in ("1", "2", "all"):
         bucket, mid_norag, mid_rag = await run_planning_matrix(
-            commands, args.trials, args.concurrency, args.leakfree, prompt_name, args.backend)
-        if args.rq in ("3", "all"):
-            s = JsonlSink(RESULTS / "rq3.jsonl")
-            write_rq3(bucket, validator, s, mid_norag, mid_rag, args.leakfree); s.close()
+            commands, args.trials, args.concurrency, args.leakfree, prompt_name, args.backend, budget)
         if args.rq in ("1", "all"):
             s = JsonlSink(RESULTS / "rq1.jsonl")
-            write_rq1(bucket, validator, s, mid_rag, args.leakfree); s.close()
-    if args.rq in ("2", "all"):
-        # reuse_bucket lets RQ2 skip re-generating k=0 and k=max (~40% fewer LLM calls)
-        await run_rq2(commands, args.trials, args.concurrency, args.sizes, args.leakfree,
-                      args.backend, reuse_bucket=bucket, mid_norag=mid_norag or "", mid_rag=mid_rag or "")
+            write_rq1(bucket, validator, s, mid_norag, mid_rag, args.leakfree); s.close()
+        if args.rq in ("2", "all"):
+            s = JsonlSink(RESULTS / "rq2.jsonl")
+            write_rq2(bucket, validator, s, mid_rag, args.leakfree); s.close()
+    if args.rq in ("3", "all"):
+        # reuse_bucket lets RQ3 skip re-generating k=0 and k=max (~40% fewer LLM calls)
+        await run_rq3(commands, args.trials, args.concurrency, args.sizes, args.leakfree,
+                      args.backend, reuse_bucket=bucket, mid_norag=mid_norag or "", mid_rag=mid_rag or "",
+                      budget=budget)
 
+    if args.max_calls is not None:
+        print(f"\nLLM calls this run: {budget.used}/{args.max_calls}")
     print(f"\nDone. JSONL results in {RESULTS}")
     print("Next:  python -m eval.analyze   then   python -m eval.build_workbook")
 

@@ -1,4 +1,4 @@
-# RQ1 实验修改说明
+# RQ2 实验修改说明
 
 ## 修改日期
 2026-01-21
@@ -73,13 +73,13 @@ class RuleBasedValidation:
 cd /home/olivia/llms-ros2/experiments
 
 # 完整运行（默认）
-python3 run_rq1_safety.py
+python3 run_rq2_safety.py
 
 # 快速测试
-python3 run_rq1_safety.py --trials 1
+python3 run_rq2_safety.py --trials 1
 
 # 使用自定义命令文件
-python3 run_rq1_safety.py --commands my_test_suite.json --trials 3
+python3 run_rq2_safety.py --commands my_test_suite.json --trials 3
 ```
 
 ## 代码变更位置

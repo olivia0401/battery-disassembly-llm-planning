@@ -49,7 +49,7 @@ Visualization Manager:
         Interactive Marker Size: 0.2
         Joint Violation Color: 255; 0; 255
         Planning Group: manipulator
-        Query Goal State: true
+        Query Goal State: false
         Query Start State: false
         Show Workspace: false
         Start State Alpha: 1

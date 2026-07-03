@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-RQ3: Ablation Study (Section 3.7.6)
+RQ1: Ablation Study (Section 3.7.6)
 
 Research Question: What is the contribution of each system component?
 
@@ -193,7 +193,7 @@ class FullRAGPlanner:
             config_dir=config_dir,
             backend="openrouter",
             enable_rag=True,  # KEY: Enable RAG
-            rag_limit=rag_limit  # For RQ2 memory size experiments
+            rag_limit=rag_limit  # For RQ3 memory size experiments
         )
 
     def plan(self, command: str) -> List[Dict[str, Any]]:
@@ -202,8 +202,8 @@ class FullRAGPlanner:
         return result.get('plan', [])
 
 
-class RQ1Experiment:
-    """Main experiment coordinator for RQ1 ablation study."""
+class RQ2Experiment:
+    """Main experiment coordinator for RQ2 ablation study."""
 
     def __init__(self,
                  test_commands_path: str,
@@ -451,12 +451,12 @@ class RQ1Experiment:
         )
 
     def run_all_trials(self):
-        """Execute complete RQ3 experiment."""
+        """Execute complete RQ1 experiment."""
         total_tests = sum(len(cmds) for cmds in self.test_commands.values()) * len(self.configs) * self.num_trials
         current_test = 0
 
         print(f"\n{'='*60}")
-        print(f"Starting RQ3 Ablation Study")
+        print(f"Starting RQ1 Ablation Study")
         print(f"{'='*60}")
         print(f"Total tests: {total_tests}")
         print(f"Configurations: {len(self.configs)}")
@@ -512,7 +512,7 @@ class RQ1Experiment:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Save as CSV
-        csv_path = self.results_dir / f"rq3_results_{timestamp}.csv"
+        csv_path = self.results_dir / f"rq1_results_{timestamp}.csv"
         with open(csv_path, 'w', newline='') as f:
             if self.results:
                 fieldnames = list(asdict(self.results[0]).keys())
@@ -527,7 +527,7 @@ class RQ1Experiment:
                     writer.writerow(row)
 
         # Save as JSON (with full data)
-        json_path = self.results_dir / f"rq3_results_{timestamp}.json"
+        json_path = self.results_dir / f"rq1_results_{timestamp}.json"
         with open(json_path, 'w') as f:
             json.dump([asdict(r) for r in self.results], f, indent=2)
 
@@ -535,10 +535,10 @@ class RQ1Experiment:
 
 
 def main():
-    """Run RQ1 experiment."""
+    """Run RQ2 experiment."""
     import argparse
 
-    parser = argparse.ArgumentParser(description='RQ3 Ablation Study')
+    parser = argparse.ArgumentParser(description='RQ1 Ablation Study')
     parser.add_argument('--commands', default='test_commands_minimal.json',
                         help='Test commands file (default: test_commands_minimal.json - 20 commands)')
     parser.add_argument('--trials', type=int, default=3,
@@ -563,7 +563,7 @@ def main():
             sys.exit(1)
 
     # Create experiment
-    experiment = RQ1Experiment(
+    experiment = RQ2Experiment(
         test_commands_path=str(test_commands),
         skills_path=str(skills_json),
         prompt_path=str(prompt_txt),

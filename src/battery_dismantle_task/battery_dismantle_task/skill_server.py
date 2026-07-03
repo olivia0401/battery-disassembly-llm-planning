@@ -14,7 +14,7 @@ import threading
 
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import DisplayTrajectory, PlanningScene, AllowedCollisionMatrix, AllowedCollisionEntry, PlanningSceneComponents
-from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
+from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene, GetPositionIK
 from control_msgs.action import FollowJointTrajectory
 
 # MoveItPy for planning scene manipulation
@@ -124,6 +124,24 @@ class SkillServer(Node):
         )
         self.get_logger().info("✅ Planning scene client created.")
 
+        # IK client for runtime approach-pose computation. Shares the action
+        # ReentrantCallbackGroup so its response is processed while a command
+        # worker thread blocks on the IK future (a MutuallyExclusive group
+        # would deadlock against the blocked command_callback).
+        self._compute_ik_client = self.create_client(
+            GetPositionIK, '/compute_ik',
+            callback_group=self._action_callback_group
+        )
+        self.get_logger().info("✅ IK client created.")
+
+        # Planning-scene query client (same group) so approach poses can be
+        # derived from each object's live pose instead of a hardcoded hint.
+        self._get_scene_client = self.create_client(
+            GetPlanningScene, '/get_planning_scene',
+            callback_group=self._action_callback_group
+        )
+        self.get_logger().info("✅ Scene query client created.")
+
     def _init_modules(self):
         """Initialize executor modules"""
         self.motion_executor = MotionExecutor(
@@ -135,6 +153,8 @@ class SkillServer(Node):
         self.motion_executor.manipulator_group_name = self.manipulator_group_name
         self.motion_executor.vel_scale = self.vel_scale
         self.motion_executor.acc_scale = self.acc_scale
+        self.motion_executor.ik_client = self._compute_ik_client
+        self.motion_executor.scene_query_client = self._get_scene_client
 
         self.scene_manager = SceneManager(self, self._planning_scene_client)
         self.skill_handlers = SkillHandlers(
@@ -501,7 +521,7 @@ class SkillServer(Node):
         if obj not in self.waypoints_json_.get("objects", {}):
             self.publish_feedback("rejected", f"approach: unknown object '{obj}'", command_id, "approach")
             return False
-        joints = self.waypoints_json_["objects"][obj].get("approach")
+        joints = self.skill_handlers._resolve_approach(obj, self.waypoints_json_["objects"][obj])
         if not joints:
             return False
         ok = self.motion_executor.plan_execute_arm(joints, "approach")

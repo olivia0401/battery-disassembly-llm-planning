@@ -118,7 +118,7 @@ def leave_one_command_out(by_cfg: Dict[str, List[dict]]) -> Optional[Dict[str, A
     """Drop each command in turn, recompute which config wins by mean Exact,
     and report how often the held-out winner matches the full-data winner.
 
-    Low agreement means the RQ3 ranking is being driven by one or two
+    Low agreement means the RQ1 ranking is being driven by one or two
     commands rather than a robust pattern across the whole set — the same
     diagnostic the sibling prompt-eval project runs per-brief.
     """
@@ -145,9 +145,9 @@ def leave_one_command_out(by_cfg: Dict[str, List[dict]]) -> Optional[Dict[str, A
             "agreement_with_full_data_winner": round(agree / n, 3) if n else None}
 
 
-# ---------------------------------------------------------------- RQ3 ablation
-def analyze_rq3(refs, vocab):
-    raw_rows = enrich(load_rq(3), refs, vocab)
+# ---------------------------------------------------------------- RQ1 ablation
+def analyze_rq1(refs, vocab):
+    raw_rows = enrich(load_rq(1), refs, vocab)
     rows = drop_fallbacks(raw_rows)
     if not rows:
         return None
@@ -225,9 +225,9 @@ def analyze_rq3(refs, vocab):
             "leave_one_command_out": leave_one_command_out(by_cfg)}
 
 
-# ---------------------------------------------------------------- RQ1 validation/safety
-def analyze_rq1(refs, vocab):
-    rows = drop_fallbacks(enrich(load_rq(1), refs, vocab))
+# ---------------------------------------------------------------- RQ2 validation/safety
+def analyze_rq2(refs, vocab):
+    rows = drop_fallbacks(enrich(load_rq(2), refs, vocab))
     if not rows:
         return None
     by_lvl = defaultdict(list)
@@ -251,15 +251,65 @@ def analyze_rq1(refs, vocab):
             "precision": prec, "recall": rec, "fpr": fpr,
             "pass_rate": wilson_ci(passed, len(rs)),
             "mean_val_ms": round(1000 * sum(r.get("validation_time", 0) for r in rs) / len(rs), 4),
-            # Same noise-floor treatment as RQ2/RQ3: None until trials>=2.
+            # Same noise-floor treatment as RQ3/RQ1: None until trials>=2.
             "noise_floor_pass_rate": _trial_noise_floor(rs, "plan_valid"),
         }
     return {"per_level": per_lvl}
 
 
-# ---------------------------------------------------------------- RQ2 memory
-def analyze_rq2(refs, vocab):
-    rows = drop_fallbacks(enrich(load_rq(2), refs, vocab))
+# ---------------------------------------------------------------- RQ2+RQ1 merged factorial
+def analyze_rq1_rq2_factorial(refs, vocab):
+    """RAG(on/off) x validation-level(NV/SV/RV/FV) safety pass-rate, in one table.
+
+    RQ2 and RQ1 were originally two separate reports that both slice "does
+    validation change the outcome" -- RQ2 by validation strictness (always on
+    the RAG-on plan), RQ1 by RAG on/off (crossed with only NV vs "validator.
+    validate_plan()", which is the SAME call as RQ2's FV level -- confirmed
+    against run_rq2_safety.py's FullValidationWrapper). This merges both into
+    one 2x4 grid instead of making a reader cross-reference two reports for
+    what is really one factorial question.
+
+    IMPORTANT HONESTY NOTE: this is NOT a full 8-cell factorial. The RAG-off
+    arm was only ever run through NV (=RQ1's LO) and FV (=RQ1's LV) -- SV and
+    RV were never applied to a no-RAG plan in any experiment. Those two cells
+    are reported as None/"not tested", not estimated or interpolated.
+    """
+    rag_on = {lvl: c for lvl, c in
+              (analyze_rq2(refs, vocab) or {"per_level": {}})["per_level"].items()}
+
+    rq1_rows = drop_fallbacks(enrich(load_rq(1), refs, vocab))
+    by_cfg = defaultdict(list)
+    for r in rq1_rows:
+        by_cfg[r.get("configuration", "?")].append(r)
+
+    def rag_off_cell(rs):
+        if not rs:
+            return None
+        passed = sum(1 for r in rs if r["plan_valid"])
+        return {"n": len(rs), "pass_rate": wilson_ci(passed, len(rs))}
+
+    rag_off = {
+        "NV": rag_off_cell(by_cfg.get("LO", [])),
+        "SV": None,  # never tested without RAG
+        "RV": None,  # never tested without RAG
+        "FV": rag_off_cell(by_cfg.get("LV", [])),
+    }
+
+    grid = {}
+    for lvl in ("NV", "SV", "RV", "FV"):
+        on = rag_on.get(lvl)
+        grid[lvl] = {
+            "name": LEVEL_NAMES.get(lvl, lvl),
+            "rag_on": {"n": on["n"], "pass_rate": on["pass_rate"]} if on else None,
+            "rag_off": rag_off[lvl],
+        }
+    untested = [lvl for lvl, v in grid.items() if v["rag_off"] is None]
+    return {"grid": grid, "untested_rag_off_levels": untested}
+
+
+# ---------------------------------------------------------------- RQ3 memory
+def analyze_rq3(refs, vocab):
+    rows = drop_fallbacks(enrich(load_rq(3), refs, vocab))
     if not rows:
         return None
     by_k = defaultdict(list)
@@ -377,9 +427,10 @@ def main():
     prov = provenance()
     summary = {
         "data_provenance": prov,
-        "rq1": analyze_rq1(refs, vocab),
         "rq2": analyze_rq2(refs, vocab),
         "rq3": analyze_rq3(refs, vocab),
+        "rq1": analyze_rq1(refs, vocab),
+        "rq1_rq2_factorial": analyze_rq1_rq2_factorial(refs, vocab),
         "rq4": analyze_rq4(),
     }
     fb = sum(v.get("fallback_demo", 0) + v.get("error", 0) for v in prov.values())
@@ -390,36 +441,55 @@ def main():
     out.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
     print(f"Wrote {out}")
     # quick console digest
-    if summary["rq3"]:
-        print("\nRQ3 ablation (recomputed Exact):")
+    if summary["rq1"]:
+        print("\nRQ1 ablation (recomputed Exact):")
         for cfg in ["SB", "LO", "LV", "LR", "FS"]:
-            c = summary["rq3"]["per_config"].get(cfg)
+            c = summary["rq1"]["per_config"].get(cfg)
             if c:
                 e = c["exact"]
                 print(f"  {cfg:3} {c['name']:18} Exact {100*e['p']:5.1f}% "
                       f"[{100*e['lo']:.1f},{100*e['hi']:.1f}]  valid {100*c['plan_valid']['p']:.1f}%  f1 {c['mean_f1']}")
         print("  comparisons (raw p -> Holm-corrected p):")
-        for k, v in summary["rq3"]["comparisons"].items():
+        for k, v in summary["rq1"]["comparisons"].items():
             if not v:
                 continue
             h = v.get("holm") or {}
             sig = "significant" if h.get("significant") else "NOT significant after correction"
             warn = "  ⚠️ uneven dropout — comparing different survivor subsets" if v.get("uneven_dropout_warning") else ""
             print(f"    {k}: p={v['p_value']:.4f} -> p_holm={h.get('p_corrected', float('nan')):.4f} ({sig}){warn}")
-        loo = summary["rq3"].get("leave_one_command_out")
+        loo = summary["rq1"].get("leave_one_command_out")
         if loo:
             print(f"  leave-one-command-out: winner stays '{loo['full_winner']}' in "
                   f"{loo['agreement_with_full_data_winner']*100:.0f}% of {loo['n_commands']} holdouts "
                   f"({loo['winner_counts_when_held_out']})")
-        no_noise_data = [cfg for cfg, c in summary["rq3"]["per_config"].items()
+        no_noise_data = [cfg for cfg, c in summary["rq1"]["per_config"].items()
                           if c.get("noise_floor_exact") is None]
         if no_noise_data:
             print(f"  ⚠️  No repeated-trial noise-floor data for: {no_noise_data} "
                   f"(needs trials>=2 per command; rerun with --trials 3+ before treating "
                   f"p-values above as final).")
+    if summary.get("rq1_rq2_factorial"):
+        fac = summary["rq1_rq2_factorial"]
+        print("\nRQ2+RQ1 merged factorial (validator pass-rate, RAG on vs off):")
+        print(f"  {'level':6} {'RAG=on':>18}   {'RAG=off':>18}")
+        for lvl in ("NV", "SV", "RV", "FV"):
+            cell = fac["grid"][lvl]
+            def fmt(c):
+                if not c:
+                    return "not tested"
+                p = c["pass_rate"]
+                return f"{100*p['p']:5.1f}% (n={c['n']})"
+            print(f"  {lvl:6} {fmt(cell['rag_on']):>18}   {fmt(cell['rag_off']):>18}")
+        if fac["untested_rag_off_levels"]:
+            print(f"  ⚠️  RAG=off was never run through {fac['untested_rag_off_levels']} "
+                  f"validation levels in any experiment -- those cells are honestly "
+                  f"'not tested', not estimated.")
     if summary.get("rq4"):
         r4 = summary["rq4"]
-        print(f"\nRQ4 perception-noise simulation (SIMULATED, not real sensor data):")
+        print(f"\nRQ4 perception-noise simulation (EXPLORATORY -- geometric simulation, "
+              f"not real sensor data; answers the 'perception' third of the supervisor's "
+              f"feedback, complementing RQ5's real-execution check on the 'motion "
+              f"planning/autonomous execution' third):")
         for sigma, ci in r4["per_sigma_pooled"].items():
             print(f"  sigma={sigma:3}mm  grasp-success {100*ci['p']:5.1f}% [{100*ci['lo']:.1f},{100*ci['hi']:.1f}]")
         print(f"  crossover (success CI upper bound < 50%): sigma={r4['crossover_sigma_mm']}mm")

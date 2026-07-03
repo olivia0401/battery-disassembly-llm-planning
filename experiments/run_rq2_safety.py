@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-RQ1: Safety Validation Experiment (Section 3.7.3)
+RQ2: Safety Validation Experiment (Section 3.7.3)
 
 Research Question: Does two-tier validation improve safety?
 
@@ -43,8 +43,8 @@ from validator import Validator
 
 
 @dataclass
-class RQ1TrialResult:
-    """RQ1 trial result with safety-specific metrics."""
+class RQ2TrialResult:
+    """RQ2 trial result with safety-specific metrics."""
     trial_id: int
     validation_level: str
     command: str
@@ -158,7 +158,7 @@ class RuleBasedValidation:
 
 
 class FullValidationWrapper:
-    """Wrapper for Validator.validate_plan() to match RQ1 interface."""
+    """Wrapper for Validator.validate_plan() to match RQ2 interface."""
 
     def __init__(self, validator: Validator):
         """Initialize with Validator instance."""
@@ -175,7 +175,7 @@ class FullValidationWrapper:
         }
 
 
-class RQ1Experiment:
+class RQ2Experiment:
     """Safety validation experiment."""
 
     def __init__(self,
@@ -185,7 +185,7 @@ class RQ1Experiment:
                  results_dir: str,
                  num_trials: int = 5):
         """
-        Initialize RQ1 experiment.
+        Initialize RQ2 experiment.
 
         Args:
             test_commands_path: JSON file with all test commands (unified suite)
@@ -221,14 +221,14 @@ class RQ1Experiment:
         )
 
         # Results
-        self.results: List[RQ1TrialResult] = []
+        self.results: List[RQ2TrialResult] = []
 
     async def run_single_trial(self,
                          validation_level: str,
                          command: str,
                          is_unsafe: bool,
                          category: str,
-                         trial_num: int) -> RQ1TrialResult:
+                         trial_num: int) -> RQ2TrialResult:
         """Execute single safety validation trial."""
         validator = self.validators[validation_level]
 
@@ -253,7 +253,7 @@ class RQ1Experiment:
         # Stress test commands are expected to have higher failure rates
         false_positive = category.startswith('functional') and (not plan_valid)
 
-        return RQ1TrialResult(
+        return RQ2TrialResult(
             trial_id=trial_num,
             validation_level=validation_level,
             command=command,
@@ -271,7 +271,7 @@ class RQ1Experiment:
         )
 
     async def run_all_trials(self):
-        """Execute complete RQ1 experiment."""
+        """Execute complete RQ2 experiment."""
         # Combine safe and unsafe commands
         all_tests = []
 
@@ -288,7 +288,7 @@ class RQ1Experiment:
         current_test = 0
 
         print(f"\n{'='*60}")
-        print(f"Starting RQ1 Safety Validation Experiment")
+        print(f"Starting RQ2 Safety Validation Experiment")
         print(f"{'='*60}")
         print(f"Total commands: {sum(len(c) for c in self.safe_commands.values())}")
         print(f"Validation levels: {len(self.validators)}")
@@ -336,15 +336,15 @@ class RQ1Experiment:
 
         self.save_results()
         print(f"\n{'='*60}")
-        print(f"RQ1 Experiment completed! {len(self.results)} trials.")
+        print(f"RQ2 Experiment completed! {len(self.results)} trials.")
         print(f"{'='*60}\n")
 
     def save_results(self):
-        """Save RQ1 results."""
+        """Save RQ2 results."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # CSV
-        csv_path = self.results_dir / f"rq1_results_{timestamp}.csv"
+        csv_path = self.results_dir / f"rq2_results_{timestamp}.csv"
         with open(csv_path, 'w', newline='') as f:
             if self.results:
                 fieldnames = list(asdict(self.results[0]).keys())
@@ -360,7 +360,7 @@ class RQ1Experiment:
                     writer.writerow(row)
 
         # JSON
-        json_path = self.results_dir / f"rq1_results_{timestamp}.json"
+        json_path = self.results_dir / f"rq2_results_{timestamp}.json"
         with open(json_path, 'w') as f:
             json.dump([asdict(r) for r in self.results], f, indent=2)
 
@@ -371,7 +371,7 @@ async def main_async():
     """Async main function."""
     import argparse
 
-    parser = argparse.ArgumentParser(description='RQ1 Safety Validation Experiment')
+    parser = argparse.ArgumentParser(description='RQ2 Safety Validation Experiment')
     parser.add_argument('--commands', default='unified_test_suite.json',
                         help='Test commands file (default: unified_test_suite.json)')
     parser.add_argument('--trials', type=int, default=3,
@@ -389,7 +389,7 @@ async def main_async():
             print(f"ERROR: {path} not found")
             sys.exit(1)
 
-    experiment = RQ1Experiment(
+    experiment = RQ2Experiment(
         test_commands_path=str(test_commands),
         skills_path=str(skills_json),
         prompt_path=str(prompt_txt),
@@ -399,7 +399,7 @@ async def main_async():
 
     try:
         await experiment.run_all_trials()
-        print("\n✓ RQ1 Experiment completed!")
+        print("\n✓ RQ2 Experiment completed!")
         print(f"  Results: {results_dir}")
     except KeyboardInterrupt:
         print("\n\nInterrupted.")

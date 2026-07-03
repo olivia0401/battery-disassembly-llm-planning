@@ -14,6 +14,26 @@ WRIST_JOINT_INDEX = 6
 # until real joint limits are wired in from src/battery_dismantle_task/urdf.
 WRIST_JOINT_SOFT_LIMIT_RAD = 2 * math.pi
 
+# End-effector orientations (x, y, z, w) for each named approach strategy, in
+# the `world` frame. These define the grasp DIRECTION; the approach POSITION is
+# derived from the object's live planning-scene pose (see _resolve_approach), so
+# approach joints are computed by IK at runtime and track wherever the object
+# is actually rendered instead of a hardcoded hint.
+#   top_down : tool points straight down (180deg about Y) -> grasp from above.
+#   side_-Y  : top_down rotated +90deg about X -> tool points along +Y, i.e.
+#              approach a target from its -Y side (used for the battery body).
+APPROACH_ORIENTATIONS = {
+    "top_down": (0.0, 1.0, 0.0, 0.0),
+    "side_-Y": (0.0, 0.7071067811865476, 0.7071067811865476, 0.0),
+}
+
+# Approach geometry (m). For a top-down grasp the end-effector is placed this
+# far above the object centre along the gripper approach axis. It matches the
+# 0.05 m attach offset in scene_manager.attach_object so the grasped object
+# stays in place (doesn't jump to the gripper) when attached.
+GRIPPER_GRASP_REACH = 0.05
+SIDE_CLEARANCE = 0.10       # stand off this far beyond the object's -Y face
+
 
 class SkillHandlers:
     """Handles execution of high-level robot skills"""
@@ -43,8 +63,8 @@ class SkillHandlers:
             if not joints or not self.motion.plan_execute_gripper(joints, "gripper-open"):
                 return False
 
-        # 2) Approach
-        joints = obj_data.get("approach")
+        # 2) Approach (IK-computed from object pose when available)
+        joints = self._resolve_approach(object_name, obj_data)
         if not joints or not self.motion.plan_execute_arm(joints, "approach"):
             return False
 
@@ -170,6 +190,57 @@ class SkillHandlers:
 
         return None
 
+    def _resolve_approach(self, object_name, obj_data):
+        """Resolve the approach joint target for an object.
+
+        Preferred path: read the object's live pose + box dimensions from the
+        planning scene, offset it by a stand-off clearance in the direction the
+        approach_strategy specifies, and solve IK for that Cartesian pose — so
+        the approach point is always aligned with where the object is actually
+        rendered, and auto-tracks it if the object moves. Falls back to the
+        static 'approach' joint array when the object has no strategy, the
+        strategy is unknown, the scene lookup fails, or IK fails.
+        """
+        static = obj_data.get("approach")
+        strategy = obj_data.get("approach_strategy")
+        if not strategy:
+            return static  # object opted out of IK resolution
+
+        orientation = APPROACH_ORIENTATIONS.get(strategy)
+        if orientation is None:
+            self.node.get_logger().warn(
+                f"Unknown approach_strategy '{strategy}' for '{object_name}'; "
+                f"using static approach joints")
+            return static
+
+        info = self.motion.get_object_pose(object_name)
+        if not info or not info[1] or len(info[1]) < 3:
+            self.node.get_logger().warn(
+                f"⚠️  Could not read live pose for '{object_name}'; "
+                f"using static approach joints")
+            return static
+
+        (ox, oy, oz), (dx, dy, dz) = info
+        if strategy == "top_down":
+            target = (ox, oy, oz + GRIPPER_GRASP_REACH)
+        elif strategy == "side_-Y":
+            target = (ox, oy - dy / 2.0 - SIDE_CLEARANCE, oz)
+        else:
+            return static
+
+        seed = self.waypoints.get("poses", {}).get("HOME") or static
+        joints = self.motion.compute_ik(target, orientation, seed_joints=seed)
+        if joints:
+            self.node.get_logger().info(
+                f"🧮 IK approach for '{object_name}' [{strategy}]: object@"
+                f"({ox:.3f},{oy:.3f},{oz:.3f}) -> approach@"
+                f"({target[0]:.3f},{target[1]:.3f},{target[2]:.3f})")
+            return joints
+
+        self.node.get_logger().warn(
+            f"⚠️  IK failed for '{object_name}' approach; falling back to static joints")
+        return static
+
     def rotated_joints(self, base_joints, angle_deg):
         """Return a copy of base_joints with the wrist joint rotated by angle_deg.
 
@@ -199,7 +270,7 @@ class SkillHandlers:
         self.node.get_logger().info(f"🔩 Executing simplified unscrew: {object_name}")
 
         obj_data = self.waypoints["objects"][object_name]
-        approach = obj_data.get("approach")
+        approach = self._resolve_approach(object_name, obj_data)
         if not approach or not self.motion.plan_execute_arm(approach, "unscrew-approach"):
             return False
 
@@ -241,7 +312,7 @@ class SkillHandlers:
         self.node.get_logger().info(f"🔌 Executing disconnect: {object_name}")
 
         obj_data = self.waypoints["objects"][object_name]
-        approach = obj_data.get("approach")
+        approach = self._resolve_approach(object_name, obj_data)
         if not approach or not self.motion.plan_execute_arm(approach, "disconnect-approach"):
             return False
 

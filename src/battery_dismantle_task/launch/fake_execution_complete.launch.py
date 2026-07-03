@@ -20,7 +20,8 @@ from pathlib import Path
 import launch
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, TimerAction, ExecuteProcess
-from launch.substitutions import Command
+from launch.conditions import IfCondition
+from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import xacro
@@ -32,6 +33,18 @@ def load_yaml(package_share, file_path):
         return yaml.safe_load(f)
 
 def generate_launch_description():
+    # use_rviz=false: skip spawning a new RViz node on this launch. Added so
+    # a script that restarts the rest of the stack repeatedly (e.g. RQ5's
+    # per-command scene reset, which has no dedicated reset service) can
+    # leave one already-running RViz window alone across restarts instead of
+    # killing/relaunching it every time -- previously RViz never stayed open
+    # long enough to be watched, and re-launching it here on top of a
+    # surviving instance would pile up duplicate windows/node-name conflicts.
+    use_rviz_arg = DeclareLaunchArgument(
+        "use_rviz", default_value="true",
+        description="Launch RViz. Set false when an external RViz instance "
+                     "should be left running across repeated launches.")
+
     # --- Get Package Paths Using ament_index ---
     battery_dismantle_pkg_share = Path(get_package_share_directory("battery_dismantle_task"))
     kortex_description_pkg_share = Path(get_package_share_directory("kortex_description"))
@@ -123,6 +136,7 @@ def generate_launch_description():
             planning_pipelines,
             kinematics_config,
         ],
+        condition=IfCondition(LaunchConfiguration("use_rviz")),
     )
 
     # ========================================================================
@@ -232,6 +246,7 @@ def generate_launch_description():
     # LAUNCH DESCRIPTION
     # ========================================================================
     return LaunchDescription([
+        use_rviz_arg,
         # Core nodes (start immediately)
         robot_state_publisher_node,
         controller_manager_node,  # NEW!
@@ -243,6 +258,8 @@ def generate_launch_description():
         spawn_manipulator_controller,    # NEW! (2.5s)
         spawn_gripper_controller,        # NEW! (3.0s)
         visual_state_manager_node,       # (4.0s)
-        interactive_control_node,        # NEW! (5.0s) - CRITICAL FOR RVIZ INTERACTION
+        # interactive_control_node removed: it drives ros2_control from RViz
+        # interactive markers (a second command path that fights skill_server)
+        # and adds the floating marker/ghost. Not needed for LLM-driven demo.
         skill_server_node,               # (10.0s)
     ])

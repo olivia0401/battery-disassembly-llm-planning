@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-RQ2: Memory Size Experiment (Section 3.7.4)
+RQ3: Memory Size Experiment (Section 3.7.4)
 
 Research Question: What is the effect of retrieval memory size?
 
@@ -39,8 +39,8 @@ from validator import Validator
 
 
 @dataclass
-class RQ2TrialResult:
-    """RQ2 trial result with memory-specific metrics."""
+class RQ3TrialResult:
+    """RQ3 trial result with memory-specific metrics."""
     trial_id: int
     memory_size: int
     command: str
@@ -58,8 +58,8 @@ class RQ2TrialResult:
     timestamp: str
 
 
-class RQ2Experiment:
-    """Memory size experiment for RQ2."""
+class RQ3Experiment:
+    """Memory size experiment for RQ3."""
 
     def __init__(self,
                  test_commands_path: str,
@@ -71,7 +71,7 @@ class RQ2Experiment:
                  random_seed: int = 42,
                  resume_from: Optional[str] = None):
         """
-        Initialize RQ2 experiment.
+        Initialize RQ3 experiment.
 
         Args:
             memory_sizes: List of RAG memory limits to test
@@ -96,7 +96,7 @@ class RQ2Experiment:
         self.prompt_path = prompt_path
 
         # Results storage
-        self.results: List[RQ2TrialResult] = []
+        self.results: List[RQ3TrialResult] = []
 
         # Load previous results if resuming
         self.completed_tests = set()
@@ -127,7 +127,7 @@ class RQ2Experiment:
                 self.completed_tests.add(test_key)
 
                 # Reconstruct result object for final save
-                result = RQ2TrialResult(
+                result = RQ3TrialResult(
                     trial_id=int(row['trial_id']),
                     memory_size=int(row['memory_size']),
                     command=row['command'],
@@ -228,7 +228,7 @@ class RQ2Experiment:
                          memory_size: int,
                          command: str,
                          category: str,
-                         trial_num: int) -> RQ2TrialResult:
+                         trial_num: int) -> RQ3TrialResult:
         """Execute single trial with specific memory configuration."""
         planner = self.create_planner(memory_size)
 
@@ -299,7 +299,7 @@ class RQ2Experiment:
             error_type = "EXCEPTION"
             success = False
 
-        return RQ2TrialResult(
+        return RQ3TrialResult(
             trial_id=trial_num,
             memory_size=memory_size,
             command=command,
@@ -318,13 +318,13 @@ class RQ2Experiment:
         )
 
     async def run_all_trials(self):
-        """Execute complete RQ2 experiment."""
+        """Execute complete RQ3 experiment."""
         total_commands = sum(len(cmds) for cmds in self.test_commands.values())
         total_tests = total_commands * len(self.memory_sizes) * self.num_trials
         current_test = 0
 
         print(f"\n{'='*60}")
-        print(f"Starting RQ2 Memory Size Experiment")
+        print(f"Starting RQ3 Memory Size Experiment")
         print(f"{'='*60}")
         print(f"Memory sizes: {self.memory_sizes}")
         print(f"Total tests: {total_tests}")
@@ -368,15 +368,15 @@ class RQ2Experiment:
 
         self.save_results()
         print(f"\n{'='*60}")
-        print(f"RQ2 Experiment completed! {len(self.results)} trials.")
+        print(f"RQ3 Experiment completed! {len(self.results)} trials.")
         print(f"{'='*60}\n")
 
     def save_results(self):
-        """Save RQ2 results."""
+        """Save RQ3 results."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # CSV
-        csv_path = self.results_dir / f"rq2_results_{timestamp}.csv"
+        csv_path = self.results_dir / f"rq3_results_{timestamp}.csv"
         with open(csv_path, 'w', newline='') as f:
             if self.results:
                 fieldnames = list(asdict(self.results[0]).keys())
@@ -390,7 +390,7 @@ class RQ2Experiment:
                     writer.writerow(row)
 
         # JSON
-        json_path = self.results_dir / f"rq2_results_{timestamp}.json"
+        json_path = self.results_dir / f"rq3_results_{timestamp}.json"
         with open(json_path, 'w') as f:
             json.dump([asdict(r) for r in self.results], f, indent=2)
 
@@ -401,7 +401,7 @@ async def main_async():
     """Async main function."""
     import argparse
 
-    parser = argparse.ArgumentParser(description='RQ2 Memory Size Experiment')
+    parser = argparse.ArgumentParser(description='RQ3 Memory Size Experiment')
     parser.add_argument('--commands', default='test_commands_minimal.json',
                         help='Test commands file (default: test_commands_minimal.json - 20 commands)')
     parser.add_argument('--memory-sizes', type=int, nargs='+', default=[0, 10, 20, 35],
@@ -423,7 +423,7 @@ async def main_async():
             print(f"ERROR: {path} not found")
             sys.exit(1)
 
-    experiment = RQ2Experiment(
+    experiment = RQ3Experiment(
         test_commands_path=str(test_commands),
         skills_path=str(skills_json),
         prompt_path=str(prompt_txt),
@@ -436,7 +436,7 @@ async def main_async():
 
     try:
         await experiment.run_all_trials()
-        print("\n✓ RQ2 Experiment completed!")
+        print("\n✓ RQ3 Experiment completed!")
         print(f"  Results: {results_dir}")
     except KeyboardInterrupt:
         print("\n\nInterrupted.")

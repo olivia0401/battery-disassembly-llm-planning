@@ -80,11 +80,11 @@ def tab_exec(wb):
     ws["B1"] = "Executive Summary — LLM Planning & Safety-Validation Pipeline"
     ws["B1"].font = H1
     # pull clean-run numbers so Tab 1 matches Tab 3
-    rq3 = SUMMARY.get("rq3", {}) or {}
-    pcfg = rq3.get("per_config", {})
+    rq1 = SUMMARY.get("rq1", {}) or {}
+    pcfg = rq1.get("per_config", {})
     def ex(c):
         ci = pcfg.get(c, {}).get("exact"); return f"{100*ci['p']:.1f}%" if ci else "n/a"
-    cmps = rq3.get("comparisons", {})
+    cmps = rq1.get("comparisons", {})
     def pv(k):
         v = cmps.get(k); return f"{v['p_value']:.2f}" if v else "n/a"
     prov = SUMMARY.get("data_provenance", {})
@@ -93,9 +93,9 @@ def tab_exec(wb):
     r = 3
     blocks = [
         ("1. Research questions", [
-            "RQ1  Does layered validation catch unsafe/incorrect plans without over-blocking?",
-            "RQ2  Does RAG memory size improve planning correctness, and where does it saturate?",
-            "RQ3  What does each component (LLM / RAG / Validation) actually contribute?",
+            "RQ1  What does each component (LLM / RAG / Validation) actually contribute?",
+            "RQ2  Does layered validation catch unsafe/incorrect plans without over-blocking?",
+            "RQ3  Does RAG memory size improve planning correctness, and where does it saturate?",
         ]),
         ("2. Headline decision (clean leak-free run)", [
             f"• Exact-match correctness: SB {ex('SB')}, LO {ex('LO')}, "
@@ -139,7 +139,7 @@ def tab_reco(wb):
     ws = wb.create_sheet("Final Recommendations")
     _widths(ws, {"A": 22, "B": 26, "C": 22, "D": 12, "E": 26, "F": 34})
     ws["A1"] = "Final Recommendations"; ws["A1"].font = H1
-    rq3 = SUMMARY.get("rq3")
+    rq1 = SUMMARY.get("rq1")
     ws["A3"] = "Per-configuration scorecard (Exact = plan matches a correct reference)"
     ws["A3"].font = H2
     _header(ws, 4, ["Config", "Name", "Exact (95% CI)", "Step F1",
@@ -152,9 +152,9 @@ def tab_reco(wb):
         "FS": "No correctness advantage over LO; significantly below the refusing baseline (SB).",
     }
     r = 5
-    if rq3:
+    if rq1:
         for cfg in ["SB", "LO", "LV", "LR", "FS"]:
-            c = rq3["per_config"].get(cfg)
+            c = rq1["per_config"].get(cfg)
             if not c:
                 continue
             _row(ws, r, [cfg, c["name"], pct(c["exact"]), c["mean_f1"],
@@ -181,14 +181,14 @@ def tab_analysis(wb):
     ws["A1"] = "Analysis — supporting data"; ws["A1"].font = H1
     r = 3
 
-    # RQ3 ablation
-    rq3 = SUMMARY.get("rq3")
-    if rq3:
-        ws.cell(row=r, column=1, value="RQ3 — Component ablation").font = H2; r += 1
+    # RQ1 ablation
+    rq1 = SUMMARY.get("rq1")
+    if rq1:
+        ws.cell(row=r, column=1, value="RQ1 — Component ablation").font = H2; r += 1
         _header(ws, r, ["Config", "Exact (95% CI)", "Plan-valid (95% CI)",
                         "Step F1", "Mean plan (ms)", "Noise floor (±)", "Dropped rate", "Top failure modes"]); r += 1
         for cfg in ["SB", "LO", "LV", "LR", "FS"]:
-            c = rq3["per_config"].get(cfg)
+            c = rq1["per_config"].get(cfg)
             if not c:
                 continue
             fm = ", ".join(f"{k}:{v}" for k, v in sorted(c["failure_modes"].items(),
@@ -205,11 +205,11 @@ def tab_analysis(wb):
         claim = {"SB vs LO": "Value of the LLM over the scripted baseline",
                  "LO vs LR": "Effect of adding RAG retrieval",
                  "SB vs FS": "Full system vs scripted baseline"}
-        for k, v in rq3["comparisons"].items():
+        for k, v in rq1["comparisons"].items():
             _row(ws, r, [k, sig_holm(v), claim.get(k, "")]); r += 1
         r += 1
 
-        loo = rq3.get("leave_one_command_out")
+        loo = rq1.get("leave_one_command_out")
         if loo:
             ws.cell(row=r, column=1,
                     value=f"Leave-one-command-out: top config stays '{loo['full_winner']}' in "
@@ -217,7 +217,7 @@ def tab_analysis(wb):
                           f"(robustness check — low agreement would mean the ranking is driven by 1-2 commands).").font = Font(italic=True)
             r += 2
 
-        no_noise = [c for c, v in rq3["per_config"].items() if v.get("noise_floor_exact") is None]
+        no_noise = [c for c, v in rq1["per_config"].items() if v.get("noise_floor_exact") is None]
         if no_noise:
             ws.cell(row=r, column=1,
                     value=f"⚠️ No repeated-trial noise-floor data for: {', '.join(no_noise)} "
@@ -225,13 +225,13 @@ def tab_analysis(wb):
                           f"differences below the noise floor are ties, not findings).").font = Font(italic=True, color="C00000")
             r += 2
 
-    # RQ1 safety
-    rq1 = SUMMARY.get("rq1")
-    if rq1:
-        ws.cell(row=r, column=1, value="RQ1 — Safety validation (plan-level confusion matrix)").font = H2; r += 1
+    # RQ2 safety
+    rq2 = SUMMARY.get("rq2")
+    if rq2:
+        ws.cell(row=r, column=1, value="RQ2 — Safety validation (plan-level confusion matrix)").font = H2; r += 1
         _header(ws, r, ["Level", "TP/FP/FN/TN", "Precision", "Recall", "FPR", "Pass rate", "Noise floor (±)"]); r += 1
         for lvl in ["NV", "SV", "RV", "FV"]:
-            c = rq1["per_level"].get(lvl)
+            c = rq2["per_level"].get(lvl)
             if not c:
                 continue
             nf = c.get("noise_floor_pass_rate")
@@ -241,12 +241,12 @@ def tab_analysis(wb):
                          pct(c["pass_rate"]), nf_str]); r += 1
         r += 2
 
-    # RQ2 memory
-    rq2 = SUMMARY.get("rq2")
-    if rq2:
-        ws.cell(row=r, column=1, value="RQ2 — Memory size (Exact vs k) — supports: 'RAG saturates / no gain'").font = H2; r += 1
+    # RQ3 memory
+    rq3 = SUMMARY.get("rq3")
+    if rq3:
+        ws.cell(row=r, column=1, value="RQ3 — Memory size (Exact vs k) — supports: 'RAG saturates / no gain'").font = H2; r += 1
         _header(ws, r, ["k", "Exact (95% CI)", "Step F1", "Seen Exact", "Unseen Exact", "Mean sim"]); r += 1
-        for k, c in rq2["per_k"].items():
+        for k, c in rq3["per_k"].items():
             _row(ws, r, [k, pct(c["exact"]), c["mean_f1"],
                          pct(c["seen_exact"]) if c["seen_exact"] else "n/a",
                          pct(c["unseen_exact"]) if c["unseen_exact"] else "n/a",
@@ -254,7 +254,7 @@ def tab_analysis(wb):
         r += 1
         ws.cell(row=r, column=1, value="Saturation (McNemar between adjacent k, Holm-Bonferroni corrected)").font = Font(italic=True); r += 1
         _header(ws, r, ["Comparison", "Verdict (Holm-corrected)"]); r += 1
-        for k, v in rq2["saturation"].items():
+        for k, v in rq3["saturation"].items():
             _row(ws, r, [k, sig_holm(v)]); r += 1
         r += 1
 
@@ -294,7 +294,7 @@ def tab_labels(wb):
                 "vs the auto 'Exact' column. References flagged needs_review must be checked first.")
     ws["A2"].alignment = WRAP
     refs, vocab = load_refs(), load_vocab()
-    rows = enrich(load_json(_latest("rq3_results_*.json")), refs, vocab)
+    rows = enrich(load_json(_latest("rq1_results_*.json")), refs, vocab)
     # take a stratified-ish sample: first occurrence of each command, prefer LLM configs
     seen = {}
     for r in rows:
