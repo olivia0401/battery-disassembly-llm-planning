@@ -26,6 +26,23 @@ class Validator:
         self.valid_poses = set(self.skills_config['available_poses'])
         self.valid_objects = set(self.skills_config['available_objects'])
 
+        # Required params per skill, read straight from skills.json so the
+        # validator can't drift out of sync with the skill definitions.
+        self.required_params = {
+            s['name']: s.get('required_params', [])
+            for s in self.skills_config['available_skills']
+        }
+
+        # How each skill's "target" param is interpreted. moveTo takes a named
+        # pose; grasp/release/inspect/unscrew/disconnect all act on a physical
+        # object. This is what lets validate_plan reject "unscrew(HOME)" or
+        # "moveTo(TopCoverBolts)" instead of only checking that *some* target
+        # string is present.
+        self.pose_target_skills = {"moveTo"}
+        self.object_target_skills = {
+            "grasp", "release", "inspect", "unscrew", "disconnect",
+        }
+
     def validate_plan(self, plan: Dict) -> Tuple[bool, List[str]]:
         """
         Schema验证 - 检查计划格式和内容
@@ -64,25 +81,37 @@ class Validator:
                 errors.append(f"Step {i+1}: invalid skill '{skill_name}'")
                 continue
 
-            # 检查target参数（某些技能不需要target）
-            if skill_name in ["openGripper", "closeGripper"]:
-                # 这些技能不需要target参数
-                pass
-            else:
-                # 其他技能需要target参数
-                if 'target' not in params:
-                    errors.append(f"Step {i+1}: missing 'target' in params")
-                    continue
+            # 1) 每个技能声明的必需参数都必须存在（数据来自 skills.json）
+            missing = [p for p in self.required_params[skill_name]
+                       if p not in params]
+            if missing:
+                errors.append(
+                    f"Step {i+1}: {skill_name} missing "
+                    f"param(s): {', '.join(missing)}"
+                )
+                continue
 
+            # 2) 按技能类型校验参数的取值是否合法
+            if skill_name in self.pose_target_skills:
                 target = params['target']
-
-                # 检查target是否合法
-                if skill_name == "moveTo":
-                    if target not in self.valid_poses:
-                        errors.append(f"Step {i+1}: invalid pose '{target}'")
-                elif skill_name in ["grasp", "release"]:
-                    if target not in self.valid_objects:
-                        errors.append(f"Step {i+1}: invalid object '{target}'")
+                if target not in self.valid_poses:
+                    errors.append(f"Step {i+1}: invalid pose '{target}'")
+            elif skill_name in self.object_target_skills:
+                target = params['target']
+                if target not in self.valid_objects:
+                    errors.append(
+                        f"Step {i+1}: {skill_name} needs an object target, "
+                        f"got invalid/pose value '{target}'"
+                    )
+            elif skill_name == "rotateGripper":
+                angle = params['angle']
+                try:
+                    float(angle)
+                except (TypeError, ValueError):
+                    errors.append(
+                        f"Step {i+1}: rotateGripper angle must be numeric, "
+                        f"got '{angle}'"
+                    )
 
         # 3. 检查序列约束
         errors.extend(self._check_sequence_constraints(actions))
