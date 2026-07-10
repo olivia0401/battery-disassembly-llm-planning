@@ -78,7 +78,10 @@ class VisualStateManager(Node):
         BATTERY_BASE_X = 0.45
         BATTERY_BASE_Y = 0.0
         BATTERY_BASE_Z = 0.0
-        BATTERY_W, BATTERY_D, BATTERY_H = 0.16, 0.12, 0.05   # 电池包(工件)
+        # 电池包(工件)。宽度必须 <= 夹爪最大开口(~8.5cm)才能被抓起，
+        # 否则手指插进箱体 -> MoveIt 起始状态非法 -> move_group 卡死。
+        # 见 skill_handlers.GRIPPER_MAX_OPENING。
+        BATTERY_W, BATTERY_D, BATTERY_H = 0.07, 0.07, 0.05
         COVER_W, COVER_D, COVER_H = 0.05, 0.05, 0.03         # 可抓取的小盖块
 
         self.object_definitions = {
