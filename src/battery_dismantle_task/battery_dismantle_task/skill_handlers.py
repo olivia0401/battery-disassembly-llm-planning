@@ -36,6 +36,14 @@ APPROACH_ORIENTATIONS = {
 GRIPPER_GRASP_REACH = 0.04
 SIDE_CLEARANCE = 0.10       # stand off this far beyond the object's -Y face
 
+# Robotiq 2F-85 maximum finger opening (~8.5 cm). An object whose footprint is
+# wider than this in BOTH horizontal axes can never be enclosed by the gripper.
+# Grasping it anyway drives the fingers into the box, which corrupts MoveIt's
+# start state and jams move_group for every subsequent plan (the "box frozen in
+# mid-air, nothing works until restart" failure). execute_grasp checks this up
+# front and refuses before any motion.
+GRIPPER_MAX_OPENING = 0.085
+
 
 class SkillHandlers:
     """Handles execution of high-level robot skills"""
@@ -54,6 +62,20 @@ class SkillHandlers:
 
         if object_name not in self.waypoints.get("objects", {}):
             self.node.get_logger().error(f"Unknown object: {object_name}")
+            return False
+
+        # 0) Refuse ungraspable objects BEFORE any motion. Reading the live box
+        # size and rejecting oversized targets here is what stops the failed
+        # grasp from jamming move_group (see GRIPPER_MAX_OPENING). If the size
+        # can't be read, don't block — fall through and let the grasp try.
+        info = self.motion.get_object_pose(object_name)
+        dims = info[1] if info and info[1] and len(info[1]) >= 2 else None
+        if dims and min(dims[0], dims[1]) > GRIPPER_MAX_OPENING:
+            self.node.get_logger().error(
+                f"❌ Cannot grasp '{object_name}': footprint "
+                f"{dims[0]*100:.0f}x{dims[1]*100:.0f} cm exceeds the gripper's "
+                f"{GRIPPER_MAX_OPENING*100:.1f} cm opening in both axes. "
+                f"Refusing before motion so move_group is not left in a bad state.")
             return False
 
         obj_data = self.waypoints["objects"][object_name]
