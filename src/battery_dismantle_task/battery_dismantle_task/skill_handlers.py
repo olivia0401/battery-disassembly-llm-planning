@@ -2,8 +2,17 @@
 """Skill execution handlers for robot tasks"""
 
 import math
+import time
 
 from .scene_manager import TABLE_Z, PLACED_OBJECT_DIMS
+
+# After a direct-trajectory arm move, the fake controller reports the goal
+# 'done' a beat before robot_state_publisher republishes the settled TF. Any
+# code that reads the gripper's world pose immediately after a move can catch a
+# stale / mid-swing transform; feeding that into an IK target then sends the arm
+# (and the held object) somewhere wrong — e.g. the held battery ending up
+# hovering in mid-air instead of set down on the table. Let TF catch up first.
+TF_SETTLE_SEC = 0.4
 
 # joint_7 is the wrist-roll joint on the Kinova Gen3 (confirmed by HOME pose
 # in config/waypoints.json: index 6 = 1.5708 rad). rotateGripper and unscrew
@@ -64,21 +73,23 @@ class SkillHandlers:
             self.node.get_logger().error(f"Unknown object: {object_name}")
             return False
 
-        # 0) Refuse ungraspable objects BEFORE any motion. Reading the live box
-        # size and rejecting oversized targets here is what stops the failed
-        # grasp from jamming move_group (see GRIPPER_MAX_OPENING). If the size
-        # can't be read, don't block — fall through and let the grasp try.
-        info = self.motion.get_object_pose(object_name)
-        dims = info[1] if info and info[1] and len(info[1]) >= 2 else None
-        if dims and min(dims[0], dims[1]) > GRIPPER_MAX_OPENING:
+        obj_data = self.waypoints["objects"][object_name]
+        # One authoritative box size (live scene -> waypoints-declared ->
+        # default), resolved ONCE and reused for the oversize check AND the
+        # attach below, so a flaky live-scene read can't make the two disagree
+        # (which is what let the attached copy shrink to the placeholder size).
+        obj_dims = self._object_dims(object_name)
+
+        # 0) Refuse ungraspable objects BEFORE any motion. Rejecting oversized
+        # targets here is what stops the failed grasp from jamming move_group
+        # (see GRIPPER_MAX_OPENING).
+        if min(obj_dims[0], obj_dims[1]) > GRIPPER_MAX_OPENING:
             self.node.get_logger().error(
                 f"❌ Cannot grasp '{object_name}': footprint "
-                f"{dims[0]*100:.0f}x{dims[1]*100:.0f} cm exceeds the gripper's "
+                f"{obj_dims[0]*100:.0f}x{obj_dims[1]*100:.0f} cm exceeds the gripper's "
                 f"{GRIPPER_MAX_OPENING*100:.1f} cm opening in both axes. "
                 f"Refusing before motion so move_group is not left in a bad state.")
             return False
-
-        obj_data = self.waypoints["objects"][object_name]
 
         # 1) Gripper on_approach
         pose = obj_data.get("gripper_hooks", {}).get("on_approach")
@@ -113,19 +124,42 @@ class SkillHandlers:
         # which MoveIt automatically (a) removes from world collision objects
         # when the ID matches, and (b) keeps glued to end_effector_link via TF
         # with no polling timer needed.
-        # Look up the object's real box size so the attached copy matches its
-        # actual mesh (attach_object used to hardcode 5x5x2cm for every
-        # object, so e.g. TopCoverBolts — 30x20x2cm — visibly shrank/clipped
-        # the moment it was grasped).
-        live_info = self.motion.get_object_pose(object_name)
-        real_dims = live_info[1] if live_info and live_info[1] else None
-        if not self.scene.attach_object(object_name, "end_effector_link", dimensions=real_dims):
+        # Attach at the object's real box size (resolved above) so the attached
+        # copy matches its mesh instead of shrinking to attach_object's
+        # placeholder. Logged so a wrong size is visible in the skill_server log.
+        self.node.get_logger().info(f"🔧 Attaching '{object_name}' at dims={obj_dims}")
+        if not self.scene.attach_object(object_name, "end_effector_link", dimensions=obj_dims):
             self.node.get_logger().error(f"❌ attach_object failed for '{object_name}' — "
                                           f"aborting grasp so the arm doesn't move an unattached object")
             return False
 
         self.node.get_logger().info(f"✅ Grasp '{object_name}' done")
         return True
+
+    def _object_dims(self, object_name):
+        """Resolve an object's [x, y, z] box size from a single, reliable order:
+        live planning-scene geometry -> waypoints-declared `dimensions` ->
+        generic default. Shared by grasp (attach) and release (set-down height +
+        placement) so they can never disagree about how big the object is. The
+        live query can transiently return no geometry (see get_object_pose), so
+        the declared size is the safety net that stops the attached/placed copy
+        from collapsing to the placeholder box."""
+        info = self.motion.get_object_pose(object_name)
+        live = info[1] if info and info[1] and len(info[1]) >= 3 else None
+        declared = (self.waypoints.get("objects", {})
+                    .get(object_name, {}).get("dimensions"))
+        return list(live or declared or PLACED_OBJECT_DIMS)
+
+    def _place_world_xy(self, object_name):
+        """(x, y) world location to set an object down at, from its
+        cartesian_hints.place_position, or None if it has none. Lets release put
+        the object at a KNOWN spot instead of wherever a racy post-move gripper
+        TF read lands."""
+        hint = (self.waypoints.get("objects", {}).get(object_name, {})
+                .get("cartesian_hints", {}).get("place_position"))
+        if hint and "x" in hint and "y" in hint:
+            return (float(hint["x"]), float(hint["y"]))
+        return None
 
     def _lower_onto_table(self, seed_joints, where="place-lower"):
         """Gently lower the held object straight down until it rests on the
@@ -138,6 +172,10 @@ class SkillHandlers:
         the gripper is already at table height — the gentle lower is a polish
         step, not a hard gate.
         """
+        # Let the preceding move's TF settle before trusting the gripper pose
+        # (see TF_SETTLE_SEC) — a stale read here is what sent the held object
+        # to a mid-air "place" instead of down onto the table.
+        time.sleep(TF_SETTLE_SEC)
         ee = self.scene.get_link_world_pose("end_effector_link")
         if ee is None:
             self.node.get_logger().warn("place: no gripper pose; skipping gentle lower")
@@ -167,26 +205,30 @@ class SkillHandlers:
             self.node.get_logger().error(f"Unknown object: {object_name}")
             return False
 
-        # 1) Move to place position
+        # 1) Move to the set-down pose. _resolve_place_joints now targets the
+        # table set-down height directly (gripper just above the table at the
+        # place location), so the held object rests on the table the moment the
+        # gripper opens — no separate "lower" step reading a racy live gripper
+        # TF, which is what used to strand the object hovering in mid-air.
         if not place_joints:
             self.node.get_logger().error(f"Cannot resolve place for '{object_name}'")
             return False
         if not self.motion.plan_execute_arm(place_joints, "place"):
             return False
 
-        # 1.5) Gently lower so the object is set down, not dropped, on release.
-        self._lower_onto_table(place_joints, "release-lower")
-
         # 2) Open gripper
         open_joints = self.waypoints.get("poses", {}).get(self.open_gripper_pose)
         if not open_joints or not self.motion.plan_execute_gripper(open_joints, "release-gripper"):
             return False
 
-        # 3) Detach object from gripper
-        # Re-enabled alongside execute_grasp's attach_object — see that
-        # comment for why visual_state_manager's own attach/detach path
-        # doesn't actually work.
-        if not self.scene.detach_object(object_name, "end_effector_link"):
+        # 3) Detach and drop the object at the KNOWN table position — computed
+        # deterministically from the place location + object size, NOT read from
+        # the gripper's post-move TF. Every IK branch that reaches the set-down
+        # pose lands the object at the same spot, so the result is repeatable.
+        dims = self._object_dims(object_name)
+        xy = self._place_world_xy(object_name)
+        place_at = (xy[0], xy[1], TABLE_Z + dims[2] / 2.0) if xy else None
+        if not self.scene.detach_object(object_name, "end_effector_link", place_at=place_at):
             self.node.get_logger().error(f"❌ detach_object failed for '{object_name}'")
             return False
 
@@ -271,7 +313,14 @@ class SkillHandlers:
             strategy = obj_data.get("approach_strategy")
             orientation = APPROACH_ORIENTATIONS.get(strategy)
             if hint and orientation:
-                target = (hint["x"], hint["y"], hint["z"] + GRIPPER_GRASP_REACH)
+                # Target the table SET-DOWN height directly: put the gripper one
+                # fingertip-reach above where the object's centre will rest on
+                # the table (TABLE_Z + half height). Opening the gripper here
+                # sets the object straight down — no separate lower step, and
+                # release places it deterministically at this same spot.
+                dims = self._object_dims(object_name)
+                setdown_z = TABLE_Z + dims[2] / 2.0 + GRIPPER_GRASP_REACH
+                target = (hint["x"], hint["y"], setdown_z)
                 seed = self.waypoints.get("poses", {}).get("HOME") or obj_data.get("approach")
                 joints = self.motion.compute_ik(target, orientation, seed_joints=seed)
                 if joints:

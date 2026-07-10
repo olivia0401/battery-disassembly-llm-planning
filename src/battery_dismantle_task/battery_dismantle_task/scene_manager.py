@@ -183,7 +183,7 @@ class SceneManager:
             self.node.get_logger().warn(f"get_link_world_pose: TF lookup failed ({e})")
             return None
 
-    def detach_object(self, object_name, link_name="end_effector_link"):
+    def detach_object(self, object_name, link_name="end_effector_link", place_at=None):
         """Release an object and leave it resting where the gripper let go —
         instead of removing it (which made a separate visual copy teleport to a
         fixed spot) or snapping it down to table height (which made it "drop"
@@ -207,16 +207,28 @@ class SceneManager:
             # by the difference the instant it's released.
             z_offset = self.held_z_offset(dims)
 
-            place_pose = None
-            ee = self.get_link_world_pose(link_name)
-            if ee is not None:
-                (ex, ey, ez), _ = ee
-                # Object centre sits z_offset below the gripper; clamp so it
-                # rests on (never below) the table if released right at it.
-                rest_z = max(TABLE_Z + dims[2] / 2.0, ez - z_offset)
-                place_pose = (ex, ey, rest_z)
+            if place_at is not None:
+                # Deterministic drop point supplied by the caller (release
+                # computes it from the place location + object size). No live
+                # gripper TF read at all — that read was racy and stranded the
+                # object in mid-air. Clamp z so the object never sinks below the
+                # table.
+                px, py, pz = (float(v) for v in place_at)
+                place_pose = (px, py, max(TABLE_Z + dims[2] / 2.0, pz))
             else:
-                self.node.get_logger().warn("detach: TF lookup failed; removing without re-place")
+                # Fallback: leave it where the gripper actually is. Settle TF
+                # first so we don't read a stale/mid-swing pose.
+                time.sleep(0.4)
+                place_pose = None
+                ee = self.get_link_world_pose(link_name)
+                if ee is not None:
+                    (ex, ey, ez), _ = ee
+                    # Object centre sits z_offset below the gripper; clamp so it
+                    # rests on (never below) the table if released right at it.
+                    rest_z = max(TABLE_Z + dims[2] / 2.0, ez - z_offset)
+                    place_pose = (ex, ey, rest_z)
+                else:
+                    self.node.get_logger().warn("detach: TF lookup failed; removing without re-place")
 
             # Step 1: remove the attached copy from the gripper. Must be its own
             # planning-scene diff — combining detach + world-add of the same id
