@@ -66,8 +66,11 @@ class RobotUI:
                 self.executor = Executor(use_ros=True)
                 print("   ✅ Executor initialized")
 
-                self.planner = Planner(backend="openrouter", enable_rag=True)
-                print("   ✅ Planner initialized")
+                # Backend is configurable via LLM_BACKEND in .env (openai / openrouter / ollama);
+                # defaults to openai so the demo works out of the box with an OpenAI key.
+                backend = os.getenv("LLM_BACKEND", "openai")
+                self.planner = Planner(backend=backend, enable_rag=True)
+                print(f"   ✅ Planner initialized (backend={backend})")
 
                 self.validator = Validator()
                 print("   ✅ Validator initialized")
