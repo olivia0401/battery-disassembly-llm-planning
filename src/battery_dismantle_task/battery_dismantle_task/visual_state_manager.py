@@ -78,7 +78,10 @@ class VisualStateManager(Node):
         BATTERY_BASE_X = 0.45
         BATTERY_BASE_Y = 0.0
         BATTERY_BASE_Z = 0.0
-        BATTERY_W, BATTERY_D, BATTERY_H = 0.16, 0.12, 0.05   # 电池包(工件)
+        # 电池包(工件)。宽度必须 <= 夹爪最大开口(~8.5cm)才能被抓起，
+        # 否则手指插进箱体 -> MoveIt 起始状态非法 -> move_group 卡死。
+        # 见 skill_handlers.GRIPPER_MAX_OPENING。
+        BATTERY_W, BATTERY_D, BATTERY_H = 0.07, 0.07, 0.05
         COVER_W, COVER_D, COVER_H = 0.05, 0.05, 0.03         # 可抓取的小盖块
 
         self.object_definitions = {
@@ -243,14 +246,22 @@ class VisualStateManager(Node):
 
         req.scene.allowed_collision_matrix = acm
 
-        # 调用服务
-        future = self.scene_client.call_async(req)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
-
-        if future.result() and future.result().success:
-            self.get_logger().info('✅ 成功创建场景对象: TopCoverBolts, BatteryBox_0')
-        else:
-            self.get_logger().error('❌ 创建场景对象失败')
+        # 调用服务（带重试）。move_group 刚启动时 /apply_planning_scene 可能
+        # 一忙就在单次 2s 超时内不确认，导致物体没建成、场景是空的（RViz 里
+        # 电池/顶盖块"不见了"）。重试若干次并确认 success，直到真正建成为止。
+        import time
+        created = False
+        for attempt in range(1, 7):
+            future = self.scene_client.call_async(req)
+            rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
+            if future.result() and future.result().success:
+                self.get_logger().info('✅ 成功创建场景对象: TopCoverBolts, BatteryBox_0')
+                created = True
+                break
+            self.get_logger().warn(f'⚠️  场景对象创建未确认 (尝试 {attempt}/6)，重试...')
+            time.sleep(1.0)
+        if not created:
+            self.get_logger().error('❌ 创建场景对象失败（已重试6次）')
 
     def create_collision_object(self, object_id, dimensions, pose_dict):
         """创建collision object"""

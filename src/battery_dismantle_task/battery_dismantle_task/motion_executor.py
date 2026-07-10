@@ -190,6 +190,41 @@ class MotionExecutor:
             self.node.get_logger().warn("get_object_pose: /get_planning_scene unavailable")
             return None
 
+        # The live planning scene occasionally answers a query for a
+        # just-added/just-modified object with its NAME present but its
+        # geometry (primitives) not yet populated — so dims comes back None.
+        # That None then cascades through execute_grasp: the oversize check is
+        # skipped and attach_object falls back to a placeholder box size, so
+        # the object visibly SHRINKS the instant it's picked up (and the
+        # approach can't be IK-solved, so the arm doesn't track the object).
+        # Retry a few times until the object comes back WITH geometry; keep the
+        # best pose-only hit as a fallback if geometry never shows up.
+        best = None
+        for _ in range(4):
+            res = self._query_planning_scene()
+            if res is not None:
+                for co in res.scene.world.collision_objects:
+                    if co.id == object_id:
+                        p = co.pose.position
+                        dims = list(co.primitives[0].dimensions) if co.primitives else None
+                        result = ((p.x, p.y, p.z), dims)
+                        if dims and len(dims) >= 3:
+                            return result          # complete — pose + geometry
+                        best = result              # found, geometry not ready yet
+                        break
+            time.sleep(0.15)
+        if best is None:
+            self.node.get_logger().warn(
+                f"get_object_pose: '{object_id}' not found in live scene after retries")
+        else:
+            self.node.get_logger().warn(
+                f"get_object_pose: '{object_id}' found but geometry unavailable after retries")
+        return best
+
+    def _query_planning_scene(self):
+        """One /get_planning_scene call for world object names + geometry.
+        Returns the response, or None on timeout/failure. Split out of
+        get_object_pose so the latter can retry cleanly."""
         req = GetPlanningScene.Request()
         req.components.components = (
             PlanningSceneComponents.WORLD_OBJECT_GEOMETRY |
@@ -202,16 +237,7 @@ class MotionExecutor:
                 self.node.get_logger().warn("get_object_pose: timed out querying scene")
                 return None
             time.sleep(0.01)
-
-        res = future.result()
-        if res is None:
-            return None
-        for co in res.scene.world.collision_objects:
-            if co.id == object_id:
-                p = co.pose.position
-                dims = list(co.primitives[0].dimensions) if co.primitives else None
-                return (p.x, p.y, p.z), dims
-        return None
+        return future.result()
 
     def _wait_for_planning_result(self, move_goal):
         """Send goal and wait for MoveGroup planning result"""
