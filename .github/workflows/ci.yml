@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Unit tests (eval metrics + stats)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install pytest
+
+      # metrics.py and stats.py are pure functions (no ROS2/LLM), so they run
+      # in a plain runner. The ROS-dependent test_skill_handlers.py is excluded
+      # on purpose — it needs a full ROS 2 (rclpy) install.
+      - name: Run pure-function unit tests
+        run: python -m pytest experiments/eval/test_metrics.py experiments/eval/test_stats.py -v
