@@ -14,7 +14,7 @@ import threading
 
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import DisplayTrajectory, PlanningScene, AllowedCollisionMatrix, AllowedCollisionEntry, PlanningSceneComponents
-from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene, GetPositionIK
+from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene, GetPositionIK, GetPositionFK
 from control_msgs.action import FollowJointTrajectory
 
 # MoveItPy for planning scene manipulation
@@ -147,6 +147,16 @@ class SkillServer(Node):
         )
         self.get_logger().info("✅ Scene query client created.")
 
+        # FK client (same group). Used at release time to place the part exactly
+        # where the gripper's commanded joints put it (FK), instead of at a
+        # separate coordinate the gripper may not have actually reached — that
+        # mismatch made the released part teleport/fly to the drop point.
+        self._compute_fk_client = self.create_client(
+            GetPositionFK, '/compute_fk',
+            callback_group=self._action_callback_group
+        )
+        self.get_logger().info("✅ FK client created.")
+
     def _init_modules(self):
         """Initialize executor modules"""
         self.motion_executor = MotionExecutor(
@@ -160,6 +170,7 @@ class SkillServer(Node):
         self.motion_executor.acc_scale = self.acc_scale
         self.motion_executor.ik_client = self._compute_ik_client
         self.motion_executor.scene_query_client = self._get_scene_client
+        self.motion_executor.fk_client = self._compute_fk_client
 
         self.scene_manager = SceneManager(self, self._planning_scene_client)
         self.skill_handlers = SkillHandlers(

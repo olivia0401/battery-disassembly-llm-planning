@@ -6,9 +6,10 @@ import threading
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (Constraints, JointConstraint, MotionPlanRequest, RobotState,
                              PositionIKRequest, PlanningSceneComponents)
-from moveit_msgs.srv import GetPositionIK, GetPlanningScene
+from moveit_msgs.srv import GetPositionIK, GetPlanningScene, GetPositionFK
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Header
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from builtin_interfaces.msg import Duration
@@ -52,6 +53,10 @@ class MotionExecutor:
         # Planning-scene query client (same ReentrantCallbackGroup rationale);
         # lets approach poses be derived from where an object ACTUALLY is.
         self.scene_query_client = None
+        # FK client (injected by skill_server); lets release place a part at the
+        # gripper's true commanded-joint pose so it doesn't teleport to a spot
+        # the gripper never reached.
+        self.fk_client = None
         # Latest arm joint positions, tracked from /joint_states. Used as the
         # DEFAULT IK seed so every pose solves for the configuration nearest the
         # arm's current one. Seeding from a fixed pose (HOME) instead made
@@ -220,6 +225,36 @@ class MotionExecutor:
             return None
         name_to_pos = dict(zip(res.solution.joint_state.name, res.solution.joint_state.position))
         return [name_to_pos.get(j, 0.0) for j in ARM_JOINT_NAMES]
+
+    def fk(self, joints, ik_link="end_effector_link", frame="world"):
+        """Forward kinematics: world pose of `ik_link` at `joints`, via
+        /compute_fk. Returns (x, y, z) or None. The arm reliably reaches its
+        commanded joints, so FK of those joints is where the gripper ACTUALLY
+        ends up — release uses this to drop the part exactly under the gripper
+        instead of at a coordinate the gripper may not have reached."""
+        if self.fk_client is None:
+            return None
+        if (not self.fk_client.service_is_ready()
+                and not self.fk_client.wait_for_service(timeout_sec=1.0)):
+            return None
+        req = GetPositionFK.Request()
+        req.header = Header(frame_id=frame)
+        req.fk_link_names = [ik_link]
+        js = JointState()
+        js.name = list(ARM_JOINT_NAMES)
+        js.position = [float(v) for v in joints]
+        req.robot_state = RobotState(joint_state=js)
+        future = self.fk_client.call_async(req)
+        start = time.time()
+        while not future.done():
+            if time.time() - start > 3.0:
+                return None
+            time.sleep(0.01)
+        res = future.result()
+        if res is None or not res.pose_stamped:
+            return None
+        p = res.pose_stamped[0].pose.position
+        return (p.x, p.y, p.z)
 
     def get_object_pose(self, object_id):
         """Look up a world collision object's pose + box dimensions from the
