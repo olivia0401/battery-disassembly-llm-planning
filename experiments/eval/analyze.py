@@ -422,6 +422,31 @@ def provenance():
     return prov
 
 
+# ---------------------------------------------------------------- RQ5 real execution
+def analyze_rq5():
+    """Real-execution success rate by plan source, from the live ROS2/MoveIt run
+    in results_fast/rq5.jsonl. Pure aggregation of the recorded success flags —
+    does not recompute anything, so it can't change the underlying result."""
+    rows = load_rq(5)
+    if not rows:
+        return {}
+    by = defaultdict(lambda: {"ok": 0, "n": 0, "failures": []})
+    for r in rows:
+        s = r.get("plan_source", "?")
+        by[s]["n"] += 1
+        if r.get("success"):
+            by[s]["ok"] += 1
+        else:
+            by[s]["failures"].append(r.get("command", ""))
+    per_source = {
+        s: {"n": c["n"], "n_success": c["ok"],
+            "success": wilson_ci(c["ok"], c["n"]),
+            "failures": c["failures"]}
+        for s, c in sorted(by.items())
+    }
+    return {"per_source": per_source}
+
+
 def main():
     refs, vocab = load_refs(), load_vocab()
     prov = provenance()
@@ -432,6 +457,7 @@ def main():
         "rq1": analyze_rq1(refs, vocab),
         "rq1_rq2_factorial": analyze_rq1_rq2_factorial(refs, vocab),
         "rq4": analyze_rq4(),
+        "rq5": analyze_rq5(),
     }
     fb = sum(v.get("fallback_demo", 0) + v.get("error", 0) for v in prov.values())
     if fb:
@@ -468,6 +494,21 @@ def main():
             print(f"  ⚠️  No repeated-trial noise-floor data for: {no_noise_data} "
                   f"(needs trials>=2 per command; rerun with --trials 3+ before treating "
                   f"p-values above as final).")
+    if summary.get("rq2"):
+        print("\nRQ2 validator recall (share of unsafe requests the validator blocks):")
+        for lvl, d in summary["rq2"]["per_level"].items():
+            rec = d.get("recall")
+            if rec:
+                print(f"  {lvl} {LEVEL_NAMES.get(lvl, lvl):12} recall {100*rec['p']:5.1f}% "
+                      f"[{100*rec['lo']:.1f},{100*rec['hi']:.1f}]  "
+                      f"(caught {rec['k']}/{rec['n']} unsafe)")
+    if summary.get("rq3"):
+        print("\nRQ3 RAG memory-size sweep (exact-match plan correctness):")
+        for k, d in sorted(summary["rq3"]["per_k"].items(), key=lambda x: int(x[0])):
+            e = d.get("exact")
+            if e:
+                print(f"  memory k={k:>3}: exact {100*e['p']:5.1f}% "
+                      f"[{100*e['lo']:.1f},{100*e['hi']:.1f}]  n={e['n']}")
     if summary.get("rq1_rq2_factorial"):
         fac = summary["rq1_rq2_factorial"]
         print("\nRQ2+RQ1 merged factorial (validator pass-rate, RAG on vs off):")
@@ -493,6 +534,18 @@ def main():
         for sigma, ci in r4["per_sigma_pooled"].items():
             print(f"  sigma={sigma:3}mm  grasp-success {100*ci['p']:5.1f}% [{100*ci['lo']:.1f},{100*ci['hi']:.1f}]")
         print(f"  crossover (success CI upper bound < 50%): sigma={r4['crossover_sigma_mm']}mm")
+    if summary.get("rq5"):
+        print("\nRQ5 real ROS2/MoveIt execution (success by plan source):")
+        for s, d in summary["rq5"]["per_source"].items():
+            su = d["success"]
+            print(f"  {s:10} {d['n_success']}/{d['n']} succeeded  "
+                  f"[{100*su['lo']:.1f},{100*su['hi']:.1f}]")
+        # defense probe: a failed execution here == an unsafe plan the live stack caught
+        dfn = summary["rq5"]["per_source"].get("defense")
+        if dfn:
+            caught = dfn["n"] - dfn["n_success"]
+            print(f"  (defense-in-depth probe: {caught}/{dfn['n']} unsafe plans caught "
+                  f"by the live stack)")
 
 
 if __name__ == "__main__":
