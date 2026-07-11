@@ -221,13 +221,25 @@ class SkillHandlers:
         if not open_joints or not self.motion.plan_execute_gripper(open_joints, "release-gripper"):
             return False
 
-        # 3) Detach and drop the object at the KNOWN table position — computed
-        # deterministically from the place location + object size, NOT read from
-        # the gripper's post-move TF. Every IK branch that reaches the set-down
-        # pose lands the object at the same spot, so the result is repeatable.
+        # 3) Detach and drop the part at the gripper's ACTUAL pose — the forward
+        # kinematics of the joints it was just commanded to. The arm reliably
+        # reaches its commanded joints, so FK(place_joints) is exactly where the
+        # gripper is; the held part hangs one grasp-reach below it, so it lands
+        # right under the fingers with NO teleport. (Placing at a separate
+        # target the IK may only have approximately reached is what made the
+        # second part fly across to the drop point.)
         dims = self._object_dims(object_name)
-        xy = self._place_world_xy(object_name)
-        place_at = (xy[0], xy[1], TABLE_Z + dims[2] / 2.0) if xy else None
+        gripper_fk = self.motion.fk(place_joints)
+        if gripper_fk is not None:
+            place_at = (gripper_fk[0], gripper_fk[1],
+                        max(TABLE_Z + dims[2] / 2.0, gripper_fk[2] - GRIPPER_GRASP_REACH))
+            self.node.get_logger().info(
+                f"📍 release '{object_name}': gripper@({gripper_fk[0]:.3f},"
+                f"{gripper_fk[1]:.3f},{gripper_fk[2]:.3f}) -> part@("
+                f"{place_at[0]:.3f},{place_at[1]:.3f},{place_at[2]:.3f})")
+        else:
+            xy = self._place_world_xy(object_name)
+            place_at = (xy[0], xy[1], TABLE_Z + dims[2] / 2.0) if xy else None
         if not self.scene.detach_object(object_name, "end_effector_link", place_at=place_at):
             self.node.get_logger().error(f"❌ detach_object failed for '{object_name}'")
             return False
@@ -321,8 +333,9 @@ class SkillHandlers:
                 dims = self._object_dims(object_name)
                 setdown_z = TABLE_Z + dims[2] / 2.0 + GRIPPER_GRASP_REACH
                 target = (hint["x"], hint["y"], setdown_z)
-                seed = self.waypoints.get("poses", {}).get("HOME") or obj_data.get("approach")
-                joints = self.motion.compute_ik(target, orientation, seed_joints=seed)
+                # seed_joints=None -> seed from the arm's current configuration
+                # (minimal move) instead of a fixed HOME branch.
+                joints = self.motion.compute_ik(target, orientation, seed_joints=None)
                 if joints:
                     self.node.get_logger().info(
                         f"🧮 IK place for '{object_name}': target@"
@@ -375,8 +388,11 @@ class SkillHandlers:
         else:
             return static
 
-        seed = self.waypoints.get("poses", {}).get("HOME") or static
-        joints = self.motion.compute_ik(target, orientation, seed_joints=seed)
+        # seed_joints=None -> motion_executor seeds IK from the arm's CURRENT
+        # configuration, so the approach is the minimal move from where the arm
+        # is now (not a jump to some HOME-seeded branch, which made the arm
+        # swing wildly between steps).
+        joints = self.motion.compute_ik(target, orientation, seed_joints=None)
         if joints:
             self.node.get_logger().info(
                 f"🧮 IK approach for '{object_name}' [{strategy}]: object@"

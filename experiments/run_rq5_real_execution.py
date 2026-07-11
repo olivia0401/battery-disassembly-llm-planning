@@ -76,6 +76,15 @@ def restart_stack(timeout_ready_s: int = 25) -> subprocess.Popen:
         subprocess.run(["pkill", "-9", "-f", pattern], stderr=subprocess.DEVNULL)
     subprocess.run(["ros2", "daemon", "stop"], stderr=subprocess.DEVNULL)
     time.sleep(2)
+    # Clear the fast-dds shared-memory segments the killed nodes left behind.
+    # Across the ~50 restarts this run performs they otherwise accumulate and
+    # eventually corrupt the DDS transport (service calls time out, IK returns
+    # bad solutions), producing execution failures that look like robot-code
+    # bugs but are really a degraded environment. Wiping them keeps every
+    # restart as clean as the first, so success/failure reflects the code.
+    subprocess.run("rm -f /dev/shm/*fast* /dev/shm/sem.*fast* 2>/dev/null",
+                   shell=True, stderr=subprocess.DEVNULL)
+    time.sleep(1)
 
     print("  [restart] launching fresh stack...")
     log = open("/tmp/rq5_ros2_launch.log", "w")
@@ -109,11 +118,25 @@ def load_config_plans(config: str) -> dict[str, list]:
     point: does the validation/RAG layer actually prevent real robot
     failures, or does it only look better on paper (RQ2's text-only recall)?
     """
+    # The current rq1.jsonl (produced by run_fast) keys plans by
+    # `validation_level` (NV/SV/RV/FV), not the legacy `configuration`=FS/LO
+    # field this script was originally written against. Without this mapping
+    # load_config_plans matched nothing, so the llm/llm_lo execution sources
+    # silently never ran (only `reference` did). Map the two execution configs
+    # onto the validation dimension that IS present:
+    #   FS (full system, validated)  -> FV (full validation applied)
+    #   LO (LLM only, unvalidated)    -> NV (no validation)
+    # NOTE: rq1 varies only the validation layer, not RAG, so this reproduces
+    # the "validated vs unvalidated" comparison but not the original FS/LO
+    # RAG-on/off contrast (RAG is varied in RQ3, not RQ1).
+    config_to_level = {"FS": "FV", "LO": "NV"}
+    want = config_to_level.get(config, config)
     out = {}
     with open(LLM_PLANS_SOURCE, encoding="utf-8") as f:
         for line in f:
             r = json.loads(line)
-            if r.get("configuration") == config and r.get("trial_id") == 1:
+            level = r.get("validation_level", r.get("configuration"))
+            if level == want and r.get("trial_id") == 1:
                 out[r["command"]] = r["planned_skills"]
     return out
 

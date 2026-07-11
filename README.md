@@ -6,9 +6,9 @@ The project focuses less on demo-only planning and more on reliability: validati
 
 ## Demo
 
-<!-- TODO: add a screenshot or short GIF of the Gradio UI + RViz planning view here, e.g.
-![System demo](docs/demo.gif)
--->
+[![Watch the demo](https://img.youtube.com/vi/JhGjJqNxm7w/maxresdefault.jpg)](https://youtu.be/JhGjJqNxm7w)
+
+*(click the image to watch the full demo on YouTube)*
 
 - Natural-language command entered through the Gradio UI
 - LLM generates a structured skill sequence

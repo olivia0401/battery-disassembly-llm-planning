@@ -6,9 +6,10 @@ import threading
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (Constraints, JointConstraint, MotionPlanRequest, RobotState,
                              PositionIKRequest, PlanningSceneComponents)
-from moveit_msgs.srv import GetPositionIK, GetPlanningScene
+from moveit_msgs.srv import GetPositionIK, GetPlanningScene, GetPositionFK
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Header
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from builtin_interfaces.msg import Duration
@@ -52,6 +53,25 @@ class MotionExecutor:
         # Planning-scene query client (same ReentrantCallbackGroup rationale);
         # lets approach poses be derived from where an object ACTUALLY is.
         self.scene_query_client = None
+        # FK client (injected by skill_server); lets release place a part at the
+        # gripper's true commanded-joint pose so it doesn't teleport to a spot
+        # the gripper never reached.
+        self.fk_client = None
+        # Latest arm joint positions, tracked from /joint_states. Used as the
+        # DEFAULT IK seed so every pose solves for the configuration nearest the
+        # arm's current one. Seeding from a fixed pose (HOME) instead made
+        # consecutive IK calls land on unrelated branches, so the arm swung
+        # wildly between steps (up to ~3.8 rad on a single joint) and the held
+        # part appeared to fly around. Seeding from the current state keeps each
+        # move minimal and the motion smooth.
+        self._latest_arm_joints = None
+        self.node.create_subscription(
+            JointState, "/joint_states", self._on_joint_state, 10)
+
+    def _on_joint_state(self, msg):
+        pos = dict(zip(msg.name, msg.position))
+        if all(j in pos for j in ARM_JOINT_NAMES):
+            self._latest_arm_joints = [pos[j] for j in ARM_JOINT_NAMES]
 
     def plan_execute_arm(self, joints, where):
         """Plan and execute arm motion to target joint positions"""
@@ -127,6 +147,13 @@ class MotionExecutor:
             self.node.get_logger().warn("compute_ik: /compute_ik service unavailable")
             return None
 
+        # Default to seeding from the arm's CURRENT configuration so IK returns
+        # the branch NEAREST where the arm already is — keeps each move small
+        # and smooth. Callers may still pass an explicit seed to override.
+        if seed_joints is None:
+            seed_joints = self._latest_arm_joints
+
+        # Build the IK request once (reused across the best-of-N solves below).
         req = GetPositionIK.Request()
         ik_req = PositionIKRequest()
         ik_req.group_name = self.manipulator_group_name
@@ -151,9 +178,40 @@ class MotionExecutor:
 
         req.ik_request = ik_req
 
+        # The IK solver uses random restarts, so a single call can return a
+        # valid-but-far branch — the arm would swing across the workspace and a
+        # held part would fly with it (seen as up to ~4.5 rad on one joint
+        # between steps). Solve a few times and KEEP THE SOLUTION CLOSEST to the
+        # seed (the arm's current configuration), so the move is the smallest
+        # one that still reaches the target. Stop early once a small move shows
+        # up.
+        best = None
+        best_dist = None
+        for _ in range(6):
+            sol = self._call_ik_once(req)
+            if sol is None:
+                continue
+            if seed_joints:
+                dist = sum(abs(sol[i] - float(seed_joints[i]))
+                           for i in range(len(ARM_JOINT_NAMES)))
+            else:
+                dist = 0.0
+            if best is None or dist < best_dist:
+                best, best_dist = sol, dist
+            if not seed_joints or best_dist < 0.6:
+                break
+        if best is None:
+            self.node.get_logger().warn("compute_ik: no solution after retries")
+        return best
+
+    def _call_ik_once(self, req):
+        """One /compute_ik call. Returns a 7-joint list [joint_1..joint_7], or
+        None on timeout/failure. Split out so compute_ik can solve several times
+        and pick the solution nearest the seed (random restarts make repeated
+        calls return different branches)."""
         # Block on the future via a timed poll (NOT spin_once — see the
-        # nested-spin note in plan_execute_arm). The IK client shares the
-        # action ReentrantCallbackGroup, so the background MultiThreadedExecutor
+        # nested-spin note in plan_execute_arm). The IK client shares the action
+        # ReentrantCallbackGroup, so the background MultiThreadedExecutor
         # completes this future on another thread while we wait here.
         future = self.ik_client.call_async(req)
         start = time.time()
@@ -162,15 +220,41 @@ class MotionExecutor:
                 self.node.get_logger().warn("compute_ik: timed out waiting for IK result")
                 return None
             time.sleep(0.01)
-
         res = future.result()
         if res is None or res.error_code.val != 1:
-            code = None if res is None else res.error_code.val
-            self.node.get_logger().warn(f"compute_ik: no solution (error_code={code})")
             return None
-
         name_to_pos = dict(zip(res.solution.joint_state.name, res.solution.joint_state.position))
         return [name_to_pos.get(j, 0.0) for j in ARM_JOINT_NAMES]
+
+    def fk(self, joints, ik_link="end_effector_link", frame="world"):
+        """Forward kinematics: world pose of `ik_link` at `joints`, via
+        /compute_fk. Returns (x, y, z) or None. The arm reliably reaches its
+        commanded joints, so FK of those joints is where the gripper ACTUALLY
+        ends up — release uses this to drop the part exactly under the gripper
+        instead of at a coordinate the gripper may not have reached."""
+        if self.fk_client is None:
+            return None
+        if (not self.fk_client.service_is_ready()
+                and not self.fk_client.wait_for_service(timeout_sec=1.0)):
+            return None
+        req = GetPositionFK.Request()
+        req.header = Header(frame_id=frame)
+        req.fk_link_names = [ik_link]
+        js = JointState()
+        js.name = list(ARM_JOINT_NAMES)
+        js.position = [float(v) for v in joints]
+        req.robot_state = RobotState(joint_state=js)
+        future = self.fk_client.call_async(req)
+        start = time.time()
+        while not future.done():
+            if time.time() - start > 3.0:
+                return None
+            time.sleep(0.01)
+        res = future.result()
+        if res is None or not res.pose_stamped:
+            return None
+        p = res.pose_stamped[0].pose.position
+        return (p.x, p.y, p.z)
 
     def get_object_pose(self, object_id):
         """Look up a world collision object's pose + box dimensions from the
@@ -395,8 +479,20 @@ class MotionExecutor:
         point.velocities = [0.0] * 7
         point.accelerations = [0.0] * 7
 
-        # Set time to reach target (scaled by velocity factor)
-        duration_sec = 2.0 / self.vel_scale  # Base duration scaled by velocity
+        # Set time to reach the target, SCALED BY HOW FAR THE ARM TRAVELS.
+        # A fixed duration made a big joint reconfiguration snap across at high
+        # speed while a tiny nudge crawled — inconsistent speed reads as jerky.
+        # Timing the move by its largest joint delta keeps the apparent velocity
+        # roughly constant across steps, so the motion looks smooth. Falls back
+        # to the base time when the current pose isn't known yet.
+        base = 2.0 / self.vel_scale
+        cur = self._latest_arm_joints
+        if cur is not None and len(cur) == len(target_joints):
+            max_delta = max(abs(float(target_joints[i]) - float(cur[i]))
+                            for i in range(len(target_joints)))
+            duration_sec = max(1.5, min(4.0, 1.2 + 1.6 * max_delta))
+        else:
+            duration_sec = base
         point.time_from_start = Duration(sec=int(duration_sec), nanosec=int((duration_sec % 1) * 1e9))
 
         trajectory.points.append(point)
