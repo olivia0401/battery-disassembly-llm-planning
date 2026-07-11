@@ -52,6 +52,21 @@ class MotionExecutor:
         # Planning-scene query client (same ReentrantCallbackGroup rationale);
         # lets approach poses be derived from where an object ACTUALLY is.
         self.scene_query_client = None
+        # Latest arm joint positions, tracked from /joint_states. Used as the
+        # DEFAULT IK seed so every pose solves for the configuration nearest the
+        # arm's current one. Seeding from a fixed pose (HOME) instead made
+        # consecutive IK calls land on unrelated branches, so the arm swung
+        # wildly between steps (up to ~3.8 rad on a single joint) and the held
+        # part appeared to fly around. Seeding from the current state keeps each
+        # move minimal and the motion smooth.
+        self._latest_arm_joints = None
+        self.node.create_subscription(
+            JointState, "/joint_states", self._on_joint_state, 10)
+
+    def _on_joint_state(self, msg):
+        pos = dict(zip(msg.name, msg.position))
+        if all(j in pos for j in ARM_JOINT_NAMES):
+            self._latest_arm_joints = [pos[j] for j in ARM_JOINT_NAMES]
 
     def plan_execute_arm(self, joints, where):
         """Plan and execute arm motion to target joint positions"""
@@ -127,6 +142,13 @@ class MotionExecutor:
             self.node.get_logger().warn("compute_ik: /compute_ik service unavailable")
             return None
 
+        # Default to seeding from the arm's CURRENT configuration so IK returns
+        # the branch NEAREST where the arm already is — keeps each move small
+        # and smooth. Callers may still pass an explicit seed to override.
+        if seed_joints is None:
+            seed_joints = self._latest_arm_joints
+
+        # Build the IK request once (reused across the best-of-N solves below).
         req = GetPositionIK.Request()
         ik_req = PositionIKRequest()
         ik_req.group_name = self.manipulator_group_name
@@ -151,9 +173,40 @@ class MotionExecutor:
 
         req.ik_request = ik_req
 
+        # The IK solver uses random restarts, so a single call can return a
+        # valid-but-far branch — the arm would swing across the workspace and a
+        # held part would fly with it (seen as up to ~4.5 rad on one joint
+        # between steps). Solve a few times and KEEP THE SOLUTION CLOSEST to the
+        # seed (the arm's current configuration), so the move is the smallest
+        # one that still reaches the target. Stop early once a small move shows
+        # up.
+        best = None
+        best_dist = None
+        for _ in range(6):
+            sol = self._call_ik_once(req)
+            if sol is None:
+                continue
+            if seed_joints:
+                dist = sum(abs(sol[i] - float(seed_joints[i]))
+                           for i in range(len(ARM_JOINT_NAMES)))
+            else:
+                dist = 0.0
+            if best is None or dist < best_dist:
+                best, best_dist = sol, dist
+            if not seed_joints or best_dist < 0.6:
+                break
+        if best is None:
+            self.node.get_logger().warn("compute_ik: no solution after retries")
+        return best
+
+    def _call_ik_once(self, req):
+        """One /compute_ik call. Returns a 7-joint list [joint_1..joint_7], or
+        None on timeout/failure. Split out so compute_ik can solve several times
+        and pick the solution nearest the seed (random restarts make repeated
+        calls return different branches)."""
         # Block on the future via a timed poll (NOT spin_once — see the
-        # nested-spin note in plan_execute_arm). The IK client shares the
-        # action ReentrantCallbackGroup, so the background MultiThreadedExecutor
+        # nested-spin note in plan_execute_arm). The IK client shares the action
+        # ReentrantCallbackGroup, so the background MultiThreadedExecutor
         # completes this future on another thread while we wait here.
         future = self.ik_client.call_async(req)
         start = time.time()
@@ -162,13 +215,9 @@ class MotionExecutor:
                 self.node.get_logger().warn("compute_ik: timed out waiting for IK result")
                 return None
             time.sleep(0.01)
-
         res = future.result()
         if res is None or res.error_code.val != 1:
-            code = None if res is None else res.error_code.val
-            self.node.get_logger().warn(f"compute_ik: no solution (error_code={code})")
             return None
-
         name_to_pos = dict(zip(res.solution.joint_state.name, res.solution.joint_state.position))
         return [name_to_pos.get(j, 0.0) for j in ARM_JOINT_NAMES]
 
