@@ -321,8 +321,9 @@ class SkillHandlers:
                 dims = self._object_dims(object_name)
                 setdown_z = TABLE_Z + dims[2] / 2.0 + GRIPPER_GRASP_REACH
                 target = (hint["x"], hint["y"], setdown_z)
-                seed = self.waypoints.get("poses", {}).get("HOME") or obj_data.get("approach")
-                joints = self.motion.compute_ik(target, orientation, seed_joints=seed)
+                # seed_joints=None -> seed from the arm's current configuration
+                # (minimal move) instead of a fixed HOME branch.
+                joints = self.motion.compute_ik(target, orientation, seed_joints=None)
                 if joints:
                     self.node.get_logger().info(
                         f"🧮 IK place for '{object_name}': target@"
@@ -375,8 +376,11 @@ class SkillHandlers:
         else:
             return static
 
-        seed = self.waypoints.get("poses", {}).get("HOME") or static
-        joints = self.motion.compute_ik(target, orientation, seed_joints=seed)
+        # seed_joints=None -> motion_executor seeds IK from the arm's CURRENT
+        # configuration, so the approach is the minimal move from where the arm
+        # is now (not a jump to some HOME-seeded branch, which made the arm
+        # swing wildly between steps).
+        joints = self.motion.compute_ik(target, orientation, seed_joints=None)
         if joints:
             self.node.get_logger().info(
                 f"🧮 IK approach for '{object_name}' [{strategy}]: object@"

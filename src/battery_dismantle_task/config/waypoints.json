@@ -69,7 +69,7 @@
       },
       "cartesian_hints": {
         "approach_position": { "x": 0.5, "y": 0.0, "z": 0.30 },
-        "place_position": { "x": 0.3, "y": -0.4, "z": 0.10 }
+        "place_position": { "x": 0.3, "y": -0.4, "z": 0.015 }
       }
     },
     "BatteryBox_0": {
@@ -91,7 +91,7 @@
       },
       "cartesian_hints": {
         "approach_position": { "x": 0.5, "y": -0.2, "z": 0.15 },
-        "place_position": { "x": 0.3, "y": 0.4, "z": 0.075 }
+        "place_position": { "x": 0.3, "y": 0.4, "z": 0.025 }
       }
     }
   }
