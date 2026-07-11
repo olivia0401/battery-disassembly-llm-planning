@@ -47,3 +47,6 @@ src/llm_agent/rag_data/chromadb/
 # regenerate from it.
 experiments/eval/Result_robot.xlsx
 experiments/eval/analysis_summary.json
+
+# Screen recordings (demos live on YouTube, not in the repo)
+*.mp4

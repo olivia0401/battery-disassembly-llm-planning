@@ -479,8 +479,20 @@ class MotionExecutor:
         point.velocities = [0.0] * 7
         point.accelerations = [0.0] * 7
 
-        # Set time to reach target (scaled by velocity factor)
-        duration_sec = 2.0 / self.vel_scale  # Base duration scaled by velocity
+        # Set time to reach the target, SCALED BY HOW FAR THE ARM TRAVELS.
+        # A fixed duration made a big joint reconfiguration snap across at high
+        # speed while a tiny nudge crawled — inconsistent speed reads as jerky.
+        # Timing the move by its largest joint delta keeps the apparent velocity
+        # roughly constant across steps, so the motion looks smooth. Falls back
+        # to the base time when the current pose isn't known yet.
+        base = 2.0 / self.vel_scale
+        cur = self._latest_arm_joints
+        if cur is not None and len(cur) == len(target_joints):
+            max_delta = max(abs(float(target_joints[i]) - float(cur[i]))
+                            for i in range(len(target_joints)))
+            duration_sec = max(1.5, min(4.0, 1.2 + 1.6 * max_delta))
+        else:
+            duration_sec = base
         point.time_from_start = Duration(sec=int(duration_sec), nanosec=int((duration_sec % 1) * 1e9))
 
         trajectory.points.append(point)
