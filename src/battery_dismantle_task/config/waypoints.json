@@ -91,7 +91,8 @@
       },
       "cartesian_hints": {
         "approach_position": { "x": 0.5, "y": -0.2, "z": 0.15 },
-        "place_position": { "x": 0.3, "y": 0.4, "z": 0.025 }
+        "comment_place": "放置点必须和计划里 moveTo(place_bolts) 同一侧 (-Y)，否则抓着电池要横跨工作空间甩到对侧 (+Y) -> 零件乱飞。放在 place_bolts (FK≈(0.49,-0.28)) 附近但与顶盖块 (0.3,-0.4) 错开。",
+        "place_position": { "x": 0.45, "y": -0.15, "z": 0.075 }
       }
     }
   }
