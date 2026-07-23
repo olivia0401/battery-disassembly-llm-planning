@@ -109,8 +109,14 @@ Restarts the ROS2 stack before every command (no scene-reset service exists, so 
   reference set: bolt removal now accepts both the unscrew-first and
   grasp-directly routes on every phrasing, and both "sorting area" commands
   were confirmed `should_block` (it is an unreachable location, not a nickname
-  for `place_bolts`). Human-Auto kappa on the *auto Exact label* is still
-  outstanding — 27 rows await ratings in the Label-Validation tab.
+  for `place_bolts`).
+- **The `Exact` metric is systematically strict about approach moves.**
+  Human-Auto Cohen's kappa is **0.690** (agreement 23/27, rated 2026-07-23).
+  Every one of the four disagreements is the same pattern — the model prefixes
+  `moveTo(approach_bolts)` before the reference action and a human judges that
+  correct while `Exact` does not — so reported Exact rates are a mild
+  underestimate. Left in place rather than absorbed into the reference set, so
+  the limitation stays visible instead of being tuned away.
 - RQ5 executes each command once per plan source (not repeated trials), so its success-rate CIs are wide ([74%, 99%] for 17/18) — real-world motion planning (RRTConnect) has some inherent run-to-run variance this doesn't capture.
 - Every result row records the exact model id (e.g. `openai:gpt-4o-mini`) and an ISO timestamp — cite the timestamp when reporting results, since provider-side model aliases can change behavior without a version bump.
 - One `(command, trial)` combination may be missing from RQ1-3 if a single LLM call failed and hasn't been retried yet (`python -m eval.analyze` will report the exact gap); resuming the same `run_fast.py` command fills it in without re-running anything else.

@@ -343,6 +343,16 @@ def tab_labels(wb):
             "silently empty human-review tab; that is the failure mode this "
             "check exists to prevent.)"
         )
+    # Human ratings are the one input here that cannot be regenerated. This
+    # workbook is gitignored and rebuilt from scratch on every run, so ratings
+    # that live only in column H are destroyed by a routine `build_workbook`.
+    # They are therefore kept in eval/human_ratings.json (committed) and
+    # restored into column H on every rebuild.
+    human = {}
+    hr_path = HERE / "human_ratings.json"
+    if hr_path.exists():
+        human = json.loads(hr_path.read_text(encoding="utf-8")).get("ratings", {})
+
     _header(ws, 4, ["Command", "Reference plan", "Predicted plan", "Exact",
                     "Failure mode", "Safety label", "Needs review", "Human correct?"])
     rr = 5
@@ -355,10 +365,19 @@ def tab_labels(wb):
                             for s in r.get("planned_skills", []))
         _row(ws, rr, [r["command"], ref_str, pred_str, "Y" if r["exact"] else "N",
                       r["failure_mode"] or "-", r["safety_label"],
-                      "yes" if ref.get("needs_human_review") else "no", "?"])
+                      "yes" if ref.get("needs_human_review") else "no",
+                      human.get(r["command"], "?")])
         ws.row_dimensions[rr].height = 26
         rr += 1
-    ws.cell(row=rr + 1, column=1, value="Cohen's kappa (Human vs Auto Exact): __ (compute after filling column H)").font = Font(italic=True, bold=True)
+    n_restored = sum(1 for r in sample if r["command"] in human)
+    note = (f"Cohen's kappa (Human vs Auto Exact): run `python -m eval.compute_kappa`. "
+            f"{n_restored}/{len(sample)} human ratings restored from human_ratings.json — "
+            f"edit column H here, then mirror the change back into that file so it survives "
+            f"the next rebuild."
+            if n_restored else
+            "Cohen's kappa (Human vs Auto Exact): __ (fill column H, then save the ratings "
+            "into eval/human_ratings.json — column H alone is wiped on the next rebuild)")
+    ws.cell(row=rr + 1, column=1, value=note).font = Font(italic=True, bold=True)
 
 
 def main():

@@ -14,6 +14,7 @@ McNemar significance tests.
 | `analyze.py` | recomputes metrics from results -> `analysis_summary.json` (+ provenance) |
 | `build_workbook.py` | renders `Result_robot.xlsx` (Exec / Recommendations / Analysis / Label Validation) |
 | `compute_kappa.py` | Human↔Auto Cohen's kappa from the Label-Validation tab |
+| `human_ratings.json` | the 27 human Y/N ratings + the rubric they were applied with. **Committed on purpose**: they are hand-made and unreproducible, while `Result_robot.xlsx` is gitignored and rebuilt from scratch every run. `build_workbook` restores them into column H so a rebuild can't destroy them |
 | `build_leakfree_assets.py` | builds `prompt_clean.txt` + `experience_cases_clean.json` + `memory_split.json` |
 
 ## Run (analysis only, no API needed)
@@ -44,14 +45,15 @@ comparison.
 
 ## Known blockers / TODO
 
-- **Human-Auto kappa is still uncomputed.** All 34 reference plans are now
-  human-reviewed (2026-07-23), so the ruler itself is validated — but kappa
-  measures something different: whether the automatic `Exact` label agrees with
-  a human judging the same model outputs. The Label-Validation tab now carries
-  27 sampled rows; fill column H with Y/N, then run
-  `python -m eval.compute_kappa`. Until then the auto label is unvalidated
-  against human judgement, and `--provisional` output must never be reported as
-  a human kappa.
+- **Known systematic gap in the `Exact` metric.** Human-Auto kappa is **0.690**
+  (agreement 23/27 = 85.2%, rated 2026-07-23) — substantial agreement, so the
+  auto label is usable. But all four disagreements are the *same* pattern: the
+  model prefixes a harmless `moveTo(approach_bolts)` before the reference
+  action, the human calls it correct, `Exact` calls it a mismatch. So `Exact`
+  is systematically strict about approach moves, and per-config Exact rates are
+  a mild underestimate. Deliberately not "fixed" by widening the reference set:
+  removing a known, explainable disagreement purely to push kappa toward 1.0
+  would be tuning the ruler to fit the answer.
 - **Text-level validation barely catches unsafe commands: safety recall is
   2/80 (2.5%) at the Schema and Full levels, 0/80 at No-Validation and Rule.**
   This is a real negative result about the validator, not a measurement

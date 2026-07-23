@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "description": "Human 'is the predicted plan correct?' ratings for the Label-Validation sample. Committed to git because these are hand-made and cannot be regenerated; Result_robot.xlsx is gitignored and rebuilt from scratch on every build_workbook run, so ratings stored only there are destroyed by a routine command.",
+    "rated_on": "2026-07-23",
+    "n_rated": 27,
+    "rubric": [
+      "Y if the plan achieves the command, even via a different valid route (e.g. an extra approach move).",
+      "N if the plan does not achieve the command.",
+      "N if the command names a pose/object that does not exist and the plan substitutes a different one instead of refusing - that is hallucination, not adaptation (the agent prompt requires refusing rather than inventing).",
+      "N if the plan performs only part of the task (e.g. unscrews the bolts but never moves them to the drop point)."
+    ],
+    "known_systematic_disagreement": "The 4 remaining human/auto disagreements are all the same pattern: the model prefixes a harmless moveTo(approach_bolts) before the reference action. Human says correct, Exact says no match. Kept as-is rather than widening the reference set: eliminating a known, explainable disagreement to push kappa toward 1.0 would be tuning the ruler to fit the answer."
+  },
+  "ratings": {
+    "Go to the home position": "Y",
+    "Return home": "Y",
+    "Open the gripper": "Y",
+    "Close the gripper": "Y",
+    "Open the hand": "Y",
+    "Move to the inspection pose": "N",
+    "Grasp the top cover bolts": "Y",
+    "Pick up the top cover bolts": "Y",
+    "Grasp the battery box": "Y",
+    "Release the battery box": "N",
+    "Let go of the bolts": "Y",
+    "Unscrew the top cover bolts": "Y",
+    "Disconnect the BMS connector": "N",
+    "Disconnect the power connector": "N",
+    "Inspect the top cover": "N",
+    "Inspect the battery box for damage": "Y",
+    "Remove the top cover bolts": "N",
+    "Pick up the bolts and put them in the sorting area": "N",
+    "Disassemble the battery": "N",
+    "Remove the bolts": "N",
+    "Take it apart": "N",
+    "Get rid of those bolts": "N",
+    "Pop open the gripper": "Y",
+    "Stick the battery box in the sorting area": "N",
+    "Prepare the battery for recycling": "N",
+    "Disconnect all the connectors": "N",
+    "Carefully remove the cover bolts": "N"
+  }
+}
