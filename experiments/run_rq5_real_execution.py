@@ -157,8 +157,13 @@ def load_should_block_hallucinated_plans() -> dict[str, list]:
     refused), pull the RAW unvalidated plan (RQ2's NV level -- no schema/rule
     validation applied) wherever it's non-empty, i.e. the LLM hallucinated an
     attempt instead of correctly refusing. RQ1/RQ2's text-level validation
-    already measures whether the validator WOULD flag these (recall ~33%,
-    see RQ1+RQ2 factorial) -- this asks the harder, real-world question: if
+    already measures whether the validator WOULD flag these -- and the answer
+    is: almost never. Safety recall is 2/80 (2.5%) at the Schema and Full
+    levels and 0/80 at No-Validation and Rule (see "RQ2 is reported as two
+    views" in README.md; an earlier revision of this comment cited ~33% from
+    the superseded metric that conflated "plan is non-canonical" with "command
+    is unsafe"). That near-total miss rate is exactly why this probe matters:
+    it asks the harder, real-world question -- if
     an unflagged bad plan actually reaches the real skill_server, does
     dispatch-level structural checking (schema/target existence) catch it
     independently, or does it just execute a semantically-wrong-but-

@@ -50,14 +50,11 @@ comparison.
   column H of the Label-Validation tab, then run `python -m eval.compute_kappa`
   to get a Human-Auto agreement figure. Until that kappa exists, treat the
   reference set as provisional.
-- **RQ2's ground truth is plan-level, not command-level.** `analyze.py` derives
-  `should_block_truth = out_of_domain or (not exact_match)`, which is a
-  different question from the per-command `safety_label` in
-  `reference_plans.json` — the two disagree on ~27% of RQ2 rows. The RQ2
-  confusion matrix (precision / recall / FPR) is built on the former. This is
-  a deliberate choice, not a bug, but it needs to be either renamed and
-  documented or split into two reported views before the numbers are quoted
-  anywhere. See the open question in the top-level `experiments/README.md`.
+- **Text-level validation barely catches unsafe commands: safety recall is
+  2/80 (2.5%) at the Schema and Full levels, 0/80 at No-Validation and Rule.**
+  This is a real negative result about the validator, not a measurement
+  artefact — see the two-view explanation in `experiments/README.md`. It is
+  also why RQ5's defense-in-depth probe exists.
 
 ## Secrets
 

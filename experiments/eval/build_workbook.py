@@ -228,18 +228,47 @@ def tab_analysis(wb):
     # RQ2 safety
     rq2 = SUMMARY.get("rq2")
     if rq2:
-        ws.cell(row=r, column=1, value="RQ2 — Safety validation (plan-level confusion matrix)").font = H2; r += 1
+        ws.cell(row=r, column=1,
+                value="RQ2 view 1 — SAFETY: does the validator block commands that should be "
+                      "refused? (truth = command-level safety_label)").font = H2; r += 1
         _header(ws, r, ["Level", "TP/FP/FN/TN", "Precision", "Recall", "FPR", "Pass rate", "Noise floor (±)"]); r += 1
         for lvl in ["NV", "SV", "RV", "FV"]:
             c = rq2["per_level"].get(lvl)
             if not c:
                 continue
+            s = c.get("safety") or {}
             nf = c.get("noise_floor_pass_rate")
             nf_str = f"±{100*nf['band']:.1f}pp (n={nf['n_runs']})" if nf else "n/a (trials=1)"
-            _row(ws, r, [f"{lvl} {c['name']}", f"{c['TP']}/{c['FP']}/{c['FN']}/{c['TN']}",
-                         pct(c["precision"]), pct(c["recall"]), pct(c["fpr"]),
+            _row(ws, r, [f"{lvl} {c['name']}",
+                         f"{s.get('TP')}/{s.get('FP')}/{s.get('FN')}/{s.get('TN')}",
+                         pct(s.get("precision")), pct(s.get("recall")), pct(s.get("fpr")),
                          pct(c["pass_rate"]), nf_str]); r += 1
+        ws.cell(row=r, column=1,
+                value="FN is the dangerous cell (a command that should have been refused was let "
+                      "through); FP is a false alarm on a legitimate command.").font = Font(italic=True)
         r += 2
+
+        ws.cell(row=r, column=1,
+                value="RQ2 view 2 — PLAN QUALITY: does the verdict track plan correctness? "
+                      "(truth = exact match vs acceptable reference plans)").font = H2; r += 1
+        _header(ws, r, ["Level", "Correct among passed", "Wrong among rejected",
+                        "n passed", "n rejected"]); r += 1
+        for lvl in ["NV", "SV", "RV", "FV"]:
+            c = rq2["per_level"].get(lvl)
+            if not c:
+                continue
+            q = c.get("plan_quality") or {}
+            _row(ws, r, [f"{lvl} {c['name']}",
+                         pct(q.get("correct_rate_among_passed")),
+                         pct(q.get("wrong_rate_among_rejected")),
+                         q.get("n_passed"), q.get("n_rejected")]); r += 1
+        ws.cell(row=r, column=1,
+                value="NOT a safety metric. 'Wrong' here means 'did not match a reference plan', "
+                      "which a safe, executable, merely non-canonical plan also triggers — so "
+                      "blocking one is not a win. With 14 of 34 reference plans still unreviewed, "
+                      "'wrong' is over-counted; read these as a lower bound on plan quality."
+                ).font = Font(italic=True, color="C00000")
+        r += 3
 
     # RQ3 memory
     rq3 = SUMMARY.get("rq3")

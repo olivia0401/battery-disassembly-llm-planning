@@ -11,12 +11,56 @@ Experiments for Section 4 of: **"Verifiable Language-to-Skill Planning for Batte
 | RQ | Question | Script |
 |---|---|---|
 | **RQ1** | Component ablation — does RAG / validation actually help vs a scripted baseline? (SB / LO / LV / LR / FS configs) | `run_fast.py --rq 1` |
-| **RQ2** | Does the two-tier validator (Schema / Rule / Full) catch unsafe or invalid plans? | `run_fast.py --rq 2` |
+| **RQ2** | Does the two-tier validator (Schema / Rule / Full) catch unsafe or invalid plans? Reported as **two separate views** — see below | `run_fast.py --rq 2` |
 | **RQ3** | RAG memory size sensitivity — how many retrieved cases is enough? | `run_fast.py --rq 3` |
 | **RQ4** | *(exploratory)* Perception-noise robustness — geometric simulation, not a real camera pipeline | `run_rq4_perception_noise.py` |
 | **RQ5** | Does a plan that scores well/poorly on RQ1-3 actually execute safely on the real ROS2/MoveIt stack? Includes a defense-in-depth probe: send should_block commands' unvalidated hallucinated plans straight to the real skill_server and see whether dispatch-level checks catch what text-level validation missed. | `run_rq5_real_execution.py` |
 
 RQ1-3 share one underlying plan-generation pass (`run_fast.py`'s `run_planning_matrix`) so they must be run together via `run_fast.py`, not the standalone `run_rq1_ablation.py` / `run_rq2_safety.py` / `run_rq3_memory.py` scripts (those are the older per-RQ implementations `run_fast.py` superseded for speed; kept because `run_fast.py` still imports validator classes from `run_rq2_safety.py`).
+
+## RQ2 is reported as two views, not one number
+
+"Did the validator do its job?" and "was the plan any good?" are different
+questions, and merging them produces a misleading safety number. RQ2 answers
+them separately:
+
+| View | Ground truth | Question | Yields |
+|---|---|---|---|
+| **1. Safety** | per-command `safety_label` | Should this **command** have been refused? | precision / recall / FPR |
+| **2. Plan quality** | exact match vs `acceptable_reference_plans` | Does the verdict track whether the **plan** is correct? | two conditional rates, **no** safety claim |
+
+The validator's job is catching unsafe or out-of-domain *requests*, not
+enforcing a canonical *phrasing* of a plan. A plan that takes a different but
+valid route — an extra `inspect` step, a legal reordering, a path the
+reference set happens not to list — is safe and executable while still not
+being an exact match. View 2 counts it as "wrong"; view 1 correctly does not
+count blocking it as a safety win.
+
+An earlier revision used one combined field (`out_of_domain or not
+exact_match`) for the whole confusion matrix. On this dataset the two readings
+disagree on 180 of 680 rows (~27%), and the effect on the headline was large:
+
+| Level | Recall, combined field | Recall, safety only |
+|---|---|---|
+| SV / FV | 12.4% (13/105) | **2.5% (2/80)** |
+| NV / RV | 0.0% | 0.0% |
+
+The old number was ~5x too high because 11 of the 13 rejections were plans that
+were merely non-canonical, not commands that should have been refused. Under
+the combined field those counted as true positives; under the safety view they
+are what they actually are — false alarms on legitimate commands (FP=11).
+
+**So the honest finding is that text-level validation barely catches unsafe
+commands at all (2/80).** That is a negative result about the validator, and it
+is the reason RQ5's defense-in-depth probe matters: it tests whether
+dispatch-level checks in the real ROS2 stack catch what text-level validation
+demonstrably misses.
+
+Both views are sensitive to the 14 unreviewed reference plans, but only view 2
+is *biased* by them — a thinner reference set makes "not an exact match" fire
+more often. View 1 does not depend on the reference plans at all, only on the
+per-command labels, which is the main reason it is the one that carries the
+safety claim.
 
 ## Running it
 
@@ -57,22 +101,6 @@ Restarts the ROS2 stack before every command (no scene-reset service exists, so 
 
 ## Known limitations
 
-- **Open question — RQ2's ground truth is plan-level, not command-level.**
-  `eval/analyze.py` sets `should_block_truth = out_of_domain or (not
-  exact_match)`, i.e. "should the validator have rejected *this generated
-  plan*". `reference_plans.json` separately carries a per-command
-  `safety_label` (should_pass / should_block), i.e. "should this *command* be
-  refused". They answer different questions and disagree on 180 of 680 RQ2
-  rows (~27%): 140 rows whose command is `should_pass` get
-  `should_block_truth=True` purely because the plan wasn't an exact match.
-  The RQ2 confusion matrix is computed from the former. The risk is that a
-  safe, executable, merely non-canonical plan counts as "the validator should
-  have blocked this", which charges the validator for something outside its
-  job and drags its recall down — an effect amplified by the 14 unreviewed
-  reference plans, since a thinner reference set makes "not an exact match"
-  fire more often. Resolve before quoting RQ2 precision/recall: either rename
-  to `plan_should_be_rejected` and document the choice, or split into two
-  reported views (command-level and plan-level).
 - **14 of 34 reference plans are still `needs_human_review`** and no
   Human-Auto kappa has been computed yet, so the ground truth these metrics
   are measured against is itself unvalidated.
