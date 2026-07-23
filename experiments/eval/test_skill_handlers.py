@@ -1,24 +1,47 @@
 """Unit tests for src/battery_dismantle_task/.../skill_handlers.py.
 
 These are the pure-logic parts of the ROS2 package: waypoint/place
-resolution and the rotateGripper/unscrew wrist-rotation math. skill_handlers.py
-imports nothing from rclpy at module level, so this is testable on a plain
-Windows/Mac/Linux Python install with no ROS2 toolchain — confirmed by
-importing it directly here. (motion_executor.py and skill_server.py DO
-import rclpy/moveit_msgs and cannot be unit-tested this way; they need a
-real ROS2 environment, which is why those two stay untested for now — see
-README.md "What still needs manual setup here.")
+resolution and the rotateGripper/unscrew wrist-rotation math.
 
-Run:  python -m pytest experiments/eval/test_skill_handlers.py -v
+REQUIRES A ROS 2 ENVIRONMENT. skill_handlers.py does `from .scene_manager
+import TABLE_Z, PLACED_OBJECT_DIMS`, and scene_manager.py imports rclpy,
+moveit_msgs and tf2_ros at module level — so importing skill_handlers pulls
+the whole ROS stack in transitively, even though the logic under test is
+pure math. (An earlier version of this docstring claimed the module was
+importable on a plain Python install; that stopped being true when the
+scene_manager import was added, and the claim is corrected here.)
+
+Two consequences, both handled below:
+  1. It must be imported as `battery_dismantle_task.skill_handlers`, not as a
+     top-level `skill_handlers` — the relative import needs package context.
+  2. Without ROS 2 installed the whole module is skipped, not errored. A bare
+     ImportError at collection time aborts the entire pytest session and takes
+     the 37 pure-function tests in test_metrics.py / test_stats.py down with
+     it; `importorskip` keeps `python -m pytest` green on a plain install.
+
+CI runs test_metrics.py and test_stats.py explicitly (see .github/workflows/
+ci.yml) and never reaches this file.
+
+Run (needs ROS 2):  python -m pytest experiments/eval/test_skill_handlers.py -v
 """
 import math
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent /
-                       "src" / "battery_dismantle_task" / "battery_dismantle_task"))
+import pytest
 
-from skill_handlers import SkillHandlers, WRIST_JOINT_INDEX, WRIST_JOINT_SOFT_LIMIT_RAD  # noqa: E402
+# scene_manager (imported transitively by skill_handlers) needs these.
+pytest.importorskip("rclpy", reason="needs a ROS 2 install")
+pytest.importorskip("moveit_msgs", reason="needs a ROS 2 install")
+
+# Parent of the package dir, so `battery_dismantle_task` is importable AS a
+# package and skill_handlers' `from .scene_manager import ...` resolves.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent /
+                       "src" / "battery_dismantle_task"))
+
+from battery_dismantle_task.skill_handlers import (  # noqa: E402
+    SkillHandlers, WRIST_JOINT_INDEX, WRIST_JOINT_SOFT_LIMIT_RAD,
+)
 
 HOME_JOINTS = [0.0, 0.2618, 3.14159, -2.2689, 0.0, 0.9599, 1.5708]
 

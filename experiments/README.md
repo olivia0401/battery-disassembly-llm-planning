@@ -57,6 +57,25 @@ Restarts the ROS2 stack before every command (no scene-reset service exists, so 
 
 ## Known limitations
 
+- **Open question — RQ2's ground truth is plan-level, not command-level.**
+  `eval/analyze.py` sets `should_block_truth = out_of_domain or (not
+  exact_match)`, i.e. "should the validator have rejected *this generated
+  plan*". `reference_plans.json` separately carries a per-command
+  `safety_label` (should_pass / should_block), i.e. "should this *command* be
+  refused". They answer different questions and disagree on 180 of 680 RQ2
+  rows (~27%): 140 rows whose command is `should_pass` get
+  `should_block_truth=True` purely because the plan wasn't an exact match.
+  The RQ2 confusion matrix is computed from the former. The risk is that a
+  safe, executable, merely non-canonical plan counts as "the validator should
+  have blocked this", which charges the validator for something outside its
+  job and drags its recall down — an effect amplified by the 14 unreviewed
+  reference plans, since a thinner reference set makes "not an exact match"
+  fire more often. Resolve before quoting RQ2 precision/recall: either rename
+  to `plan_should_be_rejected` and document the choice, or split into two
+  reported views (command-level and plan-level).
+- **14 of 34 reference plans are still `needs_human_review`** and no
+  Human-Auto kappa has been computed yet, so the ground truth these metrics
+  are measured against is itself unvalidated.
 - RQ5 executes each command once per plan source (not repeated trials), so its success-rate CIs are wide ([74%, 99%] for 17/18) — real-world motion planning (RRTConnect) has some inherent run-to-run variance this doesn't capture.
 - Every result row records the exact model id (e.g. `openai:gpt-4o-mini`) and an ISO timestamp — cite the timestamp when reporting results, since provider-side model aliases can change behavior without a version bump.
 - One `(command, trial)` combination may be missing from RQ1-3 if a single LLM call failed and hasn't been retried yet (`python -m eval.analyze` will report the exact gap); resuming the same `run_fast.py` command fills it in without re-running anything else.

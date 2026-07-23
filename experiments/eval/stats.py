@@ -9,9 +9,15 @@ Provided
 - wilson_ci(k, n)            : 95% CI for a proportion (small-sample safe)
 - mcnemar_from_pairs(a, b)   : paired binary comparison (two configs, same items)
 - anova_tukey(groups)        : one-way ANOVA + Tukey HSD for continuous (latency)
-- noise_floor(per_run_rates) : run-to-run std of a proportion (the "equivalence" band)
-- ci_overlap(ci1, ci2)       : True if two CIs overlap (-> declare "equivalent")
+- noise_floor(per_run_rates) : run-to-run std of a proportion (the wobble band)
+- ci_disjoint(ci1, ci2)      : True if two CIs do NOT overlap (-> significant)
 - fmt_pct_ci(k, n)           : "92.4% [88.1, 95.3]" ready for a table cell
+
+Note on claiming equivalence: none of these can affirm "A and B are the same".
+Disjoint CIs and a significant McNemar establish a difference; failing to find
+one is not proof of its absence. Differences smaller than noise_floor()'s band
+should be reported as "within run-to-run noise", which is a statement about
+measurement resolution, not an equivalence result.
 """
 
 from __future__ import annotations
@@ -54,9 +60,27 @@ def fmt_pct_ci(k: int, n: int) -> str:
     return f"{100*c['p']:.1f}% [{100*c['lo']:.1f}, {100*c['hi']:.1f}]"
 
 
-def ci_overlap(ci1: Dict[str, float], ci2: Dict[str, float]) -> bool:
-    """True if two CIs overlap -> the difference is not clearly significant."""
-    return not (ci1["hi"] < ci2["lo"] or ci2["hi"] < ci1["lo"])
+def ci_disjoint(ci1: Dict[str, float], ci2: Dict[str, float]) -> bool:
+    """True if two CIs do NOT overlap -> the difference IS significant.
+
+    Only this direction is valid. The converse is a well-known trap and this
+    function deliberately does not offer it:
+
+        CIs disjoint     => difference significant          (sound)
+        CIs overlapping  => difference not significant      (NOT sound)
+
+    Two 95% CIs can overlap while a paired test on the same data still gives
+    p < 0.05, so "the intervals touch" is not evidence of no effect. To claim
+    two configs perform the *same*, use `mcnemar_from_pairs` (paired, and it
+    can only ever fail to reject, not affirm equality) or a proper equivalence
+    test (TOST) against a pre-declared margin — not interval overlap.
+
+    An earlier `ci_overlap()` here documented the unsound direction. It was
+    never called anywhere in the analysis, so no published number depends on
+    it; it is replaced rather than fixed so the unsound reading is not
+    reachable at all.
+    """
+    return ci1["hi"] < ci2["lo"] or ci2["hi"] < ci1["lo"]
 
 
 # ----------------------------------------------------------------------------
