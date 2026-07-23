@@ -17,7 +17,7 @@ import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
 from eval.analyze import (load_refs, load_vocab, enrich, load_json, _latest,
-                          CONFIG_NAMES, LEVEL_NAMES)
+                          load_rq, drop_fallbacks, CONFIG_NAMES, LEVEL_NAMES)
 
 HERE = Path(__file__).parent
 SUMMARY = json.loads((HERE / "analysis_summary.json").read_text(encoding="utf-8"))
@@ -323,13 +323,26 @@ def tab_labels(wb):
                 "vs the auto 'Exact' column. References flagged needs_review must be checked first.")
     ws["A2"].alignment = WRAP
     refs, vocab = load_refs(), load_vocab()
-    rows = enrich(load_json(_latest("rq1_results_*.json")), refs, vocab)
+    # Was `load_json(_latest("rq1_results_*.json"))` — the LEGACY results/ path,
+    # which no longer exists since the move to run_fast.py + results_fast/*.jsonl.
+    # _latest() returned None, load_json(None) returned [], and this tab silently
+    # rendered zero sample rows. That is why no human kappa was ever computed:
+    # not because column H went unfilled, but because there was nothing to fill.
+    # load_rq(1) prefers results_fast/rq1.jsonl and still falls back to legacy.
+    rows = drop_fallbacks(enrich(load_rq(1), refs, vocab))
     # take a stratified-ish sample: first occurrence of each command, prefer LLM configs
     seen = {}
     for r in rows:
         if r.get("configuration") in ("LO", "LR", "FS") and r["command"] not in seen and r.get("planned_skills"):
             seen[r["command"]] = r
     sample = list(seen.values())[:30]
+    if not sample:
+        raise SystemExit(
+            "Label Validation tab would be empty — no usable RQ1 rows found. "
+            "Run `python run_fast.py --rq all` first. (Refusing to write a "
+            "silently empty human-review tab; that is the failure mode this "
+            "check exists to prevent.)"
+        )
     _header(ws, 4, ["Command", "Reference plan", "Predicted plan", "Exact",
                     "Failure mode", "Safety label", "Needs review", "Human correct?"])
     rr = 5

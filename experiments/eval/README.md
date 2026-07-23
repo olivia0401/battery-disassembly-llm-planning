@@ -9,7 +9,7 @@ McNemar significance tests.
 |---|---|
 | `metrics.py` | LCS step Precision/Recall/F1, multi-reference Exact, 7-class failure classifier |
 | `stats.py` | Wilson CI, McNemar, ANOVA+Tukey, noise floor, Cohen's kappa |
-| `reference_plans.json` | ground-truth references + safety labels for all **34** commands (18 `should_pass` / 16 `should_block`); **14 still flagged `needs_human_review`** |
+| `reference_plans.json` | ground-truth references + safety labels for all **34** commands (18 `should_pass` / 16 `should_block`); **all human-reviewed 2026-07-23**, 0 flagged `needs_human_review` |
 | `gen_reference_plans.py` | regenerates the reference scaffold |
 | `analyze.py` | recomputes metrics from results -> `analysis_summary.json` (+ provenance) |
 | `build_workbook.py` | renders `Result_robot.xlsx` (Exec / Recommendations / Analysis / Label Validation) |
@@ -44,12 +44,14 @@ comparison.
 
 ## Known blockers / TODO
 
-- **14 of the 34 reference plans are still flagged `needs_human_review`.** They
-  were auto-generated best-effort, so every Exact / step-F1 / failure-mode
-  number is currently measured against an unvalidated ruler. Review them, fill
-  column H of the Label-Validation tab, then run `python -m eval.compute_kappa`
-  to get a Human-Auto agreement figure. Until that kappa exists, treat the
-  reference set as provisional.
+- **Human-Auto kappa is still uncomputed.** All 34 reference plans are now
+  human-reviewed (2026-07-23), so the ruler itself is validated — but kappa
+  measures something different: whether the automatic `Exact` label agrees with
+  a human judging the same model outputs. The Label-Validation tab now carries
+  27 sampled rows; fill column H with Y/N, then run
+  `python -m eval.compute_kappa`. Until then the auto label is unvalidated
+  against human judgement, and `--provisional` output must never be reported as
+  a human kappa.
 - **Text-level validation barely catches unsafe commands: safety recall is
   2/80 (2.5%) at the Schema and Full levels, 0/80 at No-Validation and Rule.**
   This is a real negative result about the validator, not a measurement

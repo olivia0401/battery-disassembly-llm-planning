@@ -56,11 +56,14 @@ is the reason RQ5's defense-in-depth probe matters: it tests whether
 dispatch-level checks in the real ROS2 stack catch what text-level validation
 demonstrably misses.
 
-Both views are sensitive to the 14 unreviewed reference plans, but only view 2
-is *biased* by them — a thinner reference set makes "not an exact match" fire
-more often. View 1 does not depend on the reference plans at all, only on the
-per-command labels, which is the main reason it is the one that carries the
-safety claim.
+View 1 does not read the reference plans at all — only the per-command
+`safety_label` — so the quality of the reference set cannot skew the safety
+claim. That independence is the main reason view 1 is the one that carries it.
+View 2 does depend on the reference set, so a thinner one makes "not an exact
+match" fire more often and drags its numbers down; read them as a lower bound.
+(All 34 references have since been human-reviewed, but the separation is what
+guarantees the safety number was never exposed to that risk in the first
+place.)
 
 ## Running it
 
@@ -101,9 +104,13 @@ Restarts the ROS2 stack before every command (no scene-reset service exists, so 
 
 ## Known limitations
 
-- **14 of 34 reference plans are still `needs_human_review`** and no
-  Human-Auto kappa has been computed yet, so the ground truth these metrics
-  are measured against is itself unvalidated.
+- **All 34 reference plans were human-reviewed on 2026-07-23** (see
+  `_meta.review_status` in reference_plans.json). Two decisions changed the
+  reference set: bolt removal now accepts both the unscrew-first and
+  grasp-directly routes on every phrasing, and both "sorting area" commands
+  were confirmed `should_block` (it is an unreachable location, not a nickname
+  for `place_bolts`). Human-Auto kappa on the *auto Exact label* is still
+  outstanding — 27 rows await ratings in the Label-Validation tab.
 - RQ5 executes each command once per plan source (not repeated trials), so its success-rate CIs are wide ([74%, 99%] for 17/18) — real-world motion planning (RRTConnect) has some inherent run-to-run variance this doesn't capture.
 - Every result row records the exact model id (e.g. `openai:gpt-4o-mini`) and an ISO timestamp — cite the timestamp when reporting results, since provider-side model aliases can change behavior without a version bump.
 - One `(command, trial)` combination may be missing from RQ1-3 if a single LLM call failed and hasn't been retried yet (`python -m eval.analyze` will report the exact gap); resuming the same `run_fast.py` command fills it in without re-running anything else.
