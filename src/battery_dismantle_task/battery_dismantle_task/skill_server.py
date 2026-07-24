@@ -92,7 +92,7 @@ class SkillServer(Node):
         # moveTo HOME round-trip (planned, executed, success feedback).
         self._setup_collision_matrix()
 
-        self.get_logger().info(f"✅ Skill Server Ready! Listening on /llm_commands")
+        self.get_logger().info(f"[OK] Skill Server Ready! Listening on /llm_commands")
 
     def _init_action_clients(self):
         """Initialize action clients"""
@@ -105,7 +105,7 @@ class SkillServer(Node):
         )
         if not self._move_group_action_client.wait_for_server(timeout_sec=10.0):
             raise RuntimeError("MoveGroup action server not available!")
-        self.get_logger().info("✅ MoveGroup action server is available.")
+        self.get_logger().info("[OK] MoveGroup action server is available.")
 
         self._manipulator_controller_client = ActionClient(
             self, FollowJointTrajectory,
@@ -117,7 +117,7 @@ class SkillServer(Node):
             "/fake_gripper_controller/follow_joint_trajectory",
             callback_group=self._action_callback_group
         )
-        self.get_logger().info("✅ Controller action clients created.")
+        self.get_logger().info("[OK] Controller action clients created.")
 
         # Shares the action ReentrantCallbackGroup so its response can be
         # processed on another thread while attach/detach blocks waiting for
@@ -127,7 +127,7 @@ class SkillServer(Node):
             ApplyPlanningScene, '/apply_planning_scene',
             callback_group=self._action_callback_group
         )
-        self.get_logger().info("✅ Planning scene client created.")
+        self.get_logger().info("[OK] Planning scene client created.")
 
         # IK client for runtime approach-pose computation. Shares the action
         # ReentrantCallbackGroup so its response is processed while a command
@@ -137,7 +137,7 @@ class SkillServer(Node):
             GetPositionIK, '/compute_ik',
             callback_group=self._action_callback_group
         )
-        self.get_logger().info("✅ IK client created.")
+        self.get_logger().info("[OK] IK client created.")
 
         # Planning-scene query client (same group) so approach poses can be
         # derived from each object's live pose instead of a hardcoded hint.
@@ -145,7 +145,7 @@ class SkillServer(Node):
             GetPlanningScene, '/get_planning_scene',
             callback_group=self._action_callback_group
         )
-        self.get_logger().info("✅ Scene query client created.")
+        self.get_logger().info("[OK] Scene query client created.")
 
         # FK client (same group). Used at release time to place the part exactly
         # where the gripper's commanded joints put it (FK), instead of at a
@@ -155,7 +155,7 @@ class SkillServer(Node):
             GetPositionFK, '/compute_fk',
             callback_group=self._action_callback_group
         )
-        self.get_logger().info("✅ FK client created.")
+        self.get_logger().info("[OK] FK client created.")
 
     def _init_modules(self):
         """Initialize executor modules"""
@@ -195,10 +195,10 @@ class SkillServer(Node):
 
     def _setup_collision_matrix(self):
         """Disable self-collision between gripper base and wrist links using MoveItPy (Method 7)"""
-        self.get_logger().info("🔧 Method 7: Setting up ACM using MoveItPy planning scene read_write...")
+        self.get_logger().info("Method 7: Setting up ACM using MoveItPy planning scene read_write...")
 
         if not MOVEITPY_AVAILABLE:
-            self.get_logger().warn("⚠️ MoveItPy not available, falling back to service-based method...")
+            self.get_logger().warn("[WARN] MoveItPy not available, falling back to service-based method...")
             self._setup_collision_matrix_fallback()
             return
 
@@ -225,14 +225,14 @@ class SkillServer(Node):
                 # Update the scene state
                 scene.current_state.update()
 
-                self.get_logger().info("✅ ACM modified: allowed collisions between:")
+                self.get_logger().info("[OK] ACM modified: allowed collisions between:")
                 self.get_logger().info("   - robotiq_85_base_link <-> spherical_wrist_1_link")
                 self.get_logger().info("   - robotiq_85_base_link <-> spherical_wrist_2_link")
 
-            self.get_logger().info("✅ Method 7 ACM setup completed successfully!")
+            self.get_logger().info("[OK] Method 7 ACM setup completed successfully!")
 
         except Exception as e:
-            self.get_logger().error(f"❌ Method 7 failed: {e}")
+            self.get_logger().error(f"[FAIL] Method 7 failed: {e}")
             self.get_logger().warn("Falling back to service-based method...")
             self._setup_collision_matrix_fallback()
 
@@ -279,7 +279,7 @@ class SkillServer(Node):
         get_req.components.components = PlanningSceneComponents.ALLOWED_COLLISION_MATRIX
         scene_resp = call_sync(get_scene_client, get_req)
         if scene_resp is None:
-            self.get_logger().warn("⏱️ Timeout fetching current ACM, skipping ACM setup")
+            self.get_logger().warn("⏱ Timeout fetching current ACM, skipping ACM setup")
             return
         acm = scene_resp.scene.allowed_collision_matrix
 
@@ -309,12 +309,12 @@ class SkillServer(Node):
         result = call_sync(apply_scene_client, request, timeout=2.0)
 
         if result is None:
-            self.get_logger().warn("⏱️ Timeout waiting for ACM update")
+            self.get_logger().warn("⏱ Timeout waiting for ACM update")
         elif result.success:
-            self.get_logger().info("✅ ACM updated (merged): disabled gripper-wrist collisions "
+            self.get_logger().info("[OK] ACM updated (merged): disabled gripper-wrist collisions "
                                     f"without touching the other {len(names) - 2} entries")
         else:
-            self.get_logger().warn("❌ Failed to update ACM via fallback method")
+            self.get_logger().warn("[FAIL] Failed to update ACM via fallback method")
 
     def _load_waypoints(self, path):
         """Load waypoints from JSON file"""
@@ -324,7 +324,7 @@ class SkillServer(Node):
                 self.waypoints_json_ = json.load(f)
             if "poses" not in self.waypoints_json_:
                 raise RuntimeError("Waypoints JSON missing 'poses' object")
-            self.get_logger().info("✅ Waypoints loaded successfully")
+            self.get_logger().info("[OK] Waypoints loaded successfully")
         except Exception as e:
             raise RuntimeError(f"Failed to load waypoints: {e}")
 
@@ -345,7 +345,7 @@ class SkillServer(Node):
             target_positions = list(final_point.positions[:7])
             duration = final_point.time_from_start.sec + final_point.time_from_start.nanosec / 1e9
 
-            self.get_logger().info(f"🎯 RViz planning detected! Duration: {duration:.2f}s")
+            self.get_logger().info(f"RViz planning detected! Duration: {duration:.2f}s")
         except Exception as e:
             self.get_logger().error(f"Error processing RViz trajectory: {e}")
 
@@ -366,7 +366,7 @@ class SkillServer(Node):
         msg.data = json.dumps(feedback)
         self.feedback_pub_.publish(msg)
 
-        feedback_msg = f"📤 Feedback({stage}/{status}): {message}"
+        feedback_msg = f"Feedback({stage}/{status}): {message}"
         if status in ["failure", "rejected"]:
             self.get_logger().error(feedback_msg)
         else:
@@ -380,7 +380,7 @@ class SkillServer(Node):
             return
 
         try:
-            self.get_logger().info(f"📨 Received command: {msg.data}")
+            self.get_logger().info(f"Received command: {msg.data}")
             cmd = json.loads(msg.data)
             command_id = cmd.get("command_id", "")
 

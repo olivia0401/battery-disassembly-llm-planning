@@ -67,7 +67,7 @@ class SkillHandlers:
 
     def execute_grasp(self, object_name):
         """Execute complex grasp sequence"""
-        self.node.get_logger().info(f"🤏 Executing complex grasp: {object_name}")
+        self.node.get_logger().info(f"Executing complex grasp: {object_name}")
 
         if object_name not in self.waypoints.get("objects", {}):
             self.node.get_logger().error(f"Unknown object: {object_name}")
@@ -85,7 +85,7 @@ class SkillHandlers:
         # (see GRIPPER_MAX_OPENING).
         if min(obj_dims[0], obj_dims[1]) > GRIPPER_MAX_OPENING:
             self.node.get_logger().error(
-                f"❌ Cannot grasp '{object_name}': footprint "
+                f"[FAIL] Cannot grasp '{object_name}': footprint "
                 f"{obj_dims[0]*100:.0f}x{obj_dims[1]*100:.0f} cm exceeds the gripper's "
                 f"{GRIPPER_MAX_OPENING*100:.1f} cm opening in both axes. "
                 f"Refusing before motion so move_group is not left in a bad state.")
@@ -127,13 +127,13 @@ class SkillHandlers:
         # Attach at the object's real box size (resolved above) so the attached
         # copy matches its mesh instead of shrinking to attach_object's
         # placeholder. Logged so a wrong size is visible in the skill_server log.
-        self.node.get_logger().info(f"🔧 Attaching '{object_name}' at dims={obj_dims}")
+        self.node.get_logger().info(f"Attaching '{object_name}' at dims={obj_dims}")
         if not self.scene.attach_object(object_name, "end_effector_link", dimensions=obj_dims):
-            self.node.get_logger().error(f"❌ attach_object failed for '{object_name}' — "
+            self.node.get_logger().error(f"[FAIL] attach_object failed for '{object_name}' — "
                                           f"aborting grasp so the arm doesn't move an unattached object")
             return False
 
-        self.node.get_logger().info(f"✅ Grasp '{object_name}' done")
+        self.node.get_logger().info(f"[OK] Grasp '{object_name}' done")
         return True
 
     def _object_dims(self, object_name):
@@ -194,12 +194,12 @@ class SkillHandlers:
             self.node.get_logger().warn("place: IK for lower failed; skipping gentle lower")
             return True
         self.node.get_logger().info(
-            f"⬇️  Lowering held object {ez - target_z:.3f} m onto the table before release")
+            f" Lowering held object {ez - target_z:.3f} m onto the table before release")
         return self.motion.plan_execute_arm(joints, where)
 
     def execute_release(self, object_name, place_joints):
         """Execute release sequence"""
-        self.node.get_logger().info(f"✋ Executing release: {object_name}")
+        self.node.get_logger().info(f"Executing release: {object_name}")
 
         if object_name not in self.waypoints.get("objects", {}):
             self.node.get_logger().error(f"Unknown object: {object_name}")
@@ -234,22 +234,22 @@ class SkillHandlers:
             place_at = (gripper_fk[0], gripper_fk[1],
                         max(TABLE_Z + dims[2] / 2.0, gripper_fk[2] - GRIPPER_GRASP_REACH))
             self.node.get_logger().info(
-                f"📍 release '{object_name}': gripper@({gripper_fk[0]:.3f},"
+                f"release '{object_name}': gripper@({gripper_fk[0]:.3f},"
                 f"{gripper_fk[1]:.3f},{gripper_fk[2]:.3f}) -> part@("
                 f"{place_at[0]:.3f},{place_at[1]:.3f},{place_at[2]:.3f})")
         else:
             xy = self._place_world_xy(object_name)
             place_at = (xy[0], xy[1], TABLE_Z + dims[2] / 2.0) if xy else None
         if not self.scene.detach_object(object_name, "end_effector_link", place_at=place_at):
-            self.node.get_logger().error(f"❌ detach_object failed for '{object_name}'")
+            self.node.get_logger().error(f"[FAIL] detach_object failed for '{object_name}'")
             return False
 
         # 4) Retreat
         retreat_joints = self.waypoints["objects"][object_name].get("retreat")
         if retreat_joints and not self.motion.plan_execute_arm(retreat_joints, "retreat"):
-            self.node.get_logger().warn("⚠️  Retreat failed, but release completed")
+            self.node.get_logger().warn("[WARN] Retreat failed, but release completed")
 
-        self.node.get_logger().info(f"✅ Release '{object_name}' complete")
+        self.node.get_logger().info(f"[OK] Release '{object_name}' complete")
         return True
 
     def execute_dismantle(self, targets, place_default):
@@ -280,7 +280,7 @@ class SkillHandlers:
             # Leave the part on the table where it was released (was missing
             # here, so dismantle never actually let go of the object).
             if not self.scene.detach_object(obj, "end_effector_link"):
-                self.node.get_logger().error(f"❌ detach_object failed for '{obj}'")
+                self.node.get_logger().error(f"[FAIL] detach_object failed for '{obj}'")
                 return False
 
             # Retreat
@@ -338,11 +338,11 @@ class SkillHandlers:
                 joints = self.motion.compute_ik(target, orientation, seed_joints=None)
                 if joints:
                     self.node.get_logger().info(
-                        f"🧮 IK place for '{object_name}': target@"
+                        f"IK place for '{object_name}': target@"
                         f"({target[0]:.3f},{target[1]:.3f},{target[2]:.3f})")
                     return joints
                 self.node.get_logger().warn(
-                    f"⚠️  IK failed for '{object_name}' place; falling back to static joints")
+                    f"[WARN] IK failed for '{object_name}' place; falling back to static joints")
 
             # From object's default place
             if "place" in obj_data and isinstance(obj_data["place"], list):
@@ -376,7 +376,7 @@ class SkillHandlers:
         info = self.motion.get_object_pose(object_name)
         if not info or not info[1] or len(info[1]) < 3:
             self.node.get_logger().warn(
-                f"⚠️  Could not read live pose for '{object_name}'; "
+                f"[WARN] Could not read live pose for '{object_name}'; "
                 f"using static approach joints")
             return static
 
@@ -395,13 +395,13 @@ class SkillHandlers:
         joints = self.motion.compute_ik(target, orientation, seed_joints=None)
         if joints:
             self.node.get_logger().info(
-                f"🧮 IK approach for '{object_name}' [{strategy}]: object@"
+                f"IK approach for '{object_name}' [{strategy}]: object@"
                 f"({ox:.3f},{oy:.3f},{oz:.3f}) -> approach@"
                 f"({target[0]:.3f},{target[1]:.3f},{target[2]:.3f})")
             return joints
 
         self.node.get_logger().warn(
-            f"⚠️  IK failed for '{object_name}' approach; falling back to static joints")
+            f"[WARN] IK failed for '{object_name}' approach; falling back to static joints")
         return static
 
     def rotated_joints(self, base_joints, angle_deg):
@@ -430,7 +430,7 @@ class SkillHandlers:
         if object_name not in self.waypoints.get("objects", {}):
             self.node.get_logger().error(f"Unknown object: {object_name}")
             return False
-        self.node.get_logger().info(f"🔩 Executing simplified unscrew: {object_name}")
+        self.node.get_logger().info(f"Executing simplified unscrew: {object_name}")
 
         obj_data = self.waypoints["objects"][object_name]
         approach = self._resolve_approach(object_name, obj_data)
@@ -445,7 +445,7 @@ class SkillHandlers:
         for i in range(turns):
             joints = self.rotated_joints(joints, degrees_per_turn)
             if not self.motion.plan_execute_arm(joints, f"unscrew-turn-{i+1}"):
-                self.node.get_logger().warn(f"⚠️  Unscrew turn {i+1}/{turns} failed")
+                self.node.get_logger().warn(f"[WARN] Unscrew turn {i+1}/{turns} failed")
                 return False
 
         open_joints = self.waypoints.get("poses", {}).get(self.open_gripper_pose)
@@ -456,7 +456,7 @@ class SkillHandlers:
         if retreat:
             self.motion.plan_execute_arm(retreat, "unscrew-retreat")
 
-        self.node.get_logger().info(f"✅ Unscrew motion sequence for '{object_name}' complete "
+        self.node.get_logger().info(f"[OK] Unscrew motion sequence for '{object_name}' complete "
                                      f"(scripted, not force-verified)")
         return True
 
@@ -472,7 +472,7 @@ class SkillHandlers:
                 f"Known objects: {list(self.waypoints.get('objects', {}).keys())}. "
                 f"Add a waypoints.json entry for this connector before retrying.")
             return False
-        self.node.get_logger().info(f"🔌 Executing disconnect: {object_name}")
+        self.node.get_logger().info(f"Executing disconnect: {object_name}")
 
         obj_data = self.waypoints["objects"][object_name]
         approach = self._resolve_approach(object_name, obj_data)
@@ -491,5 +491,5 @@ class SkillHandlers:
         if open_joints:
             self.motion.plan_execute_gripper(open_joints, "disconnect-release")
 
-        self.node.get_logger().info(f"✅ Disconnect '{object_name}' complete (grip-and-pull, not force-verified)")
+        self.node.get_logger().info(f"[OK] Disconnect '{object_name}' complete (grip-and-pull, not force-verified)")
         return True

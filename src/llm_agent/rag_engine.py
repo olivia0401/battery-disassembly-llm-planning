@@ -117,16 +117,16 @@ class RAGEngine:
 
         if not self.enabled:
             if not RAG_AVAILABLE:
-                print("ℹ️  RAG disabled: missing dependencies (chromadb, sentence-transformers)")
+                print("ℹ  RAG disabled: missing dependencies (chromadb, sentence-transformers)")
             else:
-                print("ℹ️  RAG disabled by configuration")
+                print("ℹ  RAG disabled by configuration")
             return
 
         try:
-            print("🔧 Initializing ChromaDB...")
+            print("Initializing ChromaDB...")
             self.client = chromadb.PersistentClient(path=str(self.data_dir / "chromadb"))
 
-            print(f"🤖 Loading embedding model ({self.embedding_model_name})...")
+            print(f"Loading embedding model ({self.embedding_model_name})...")
             self.embedder = SentenceTransformer(self.embedding_model_name)
             self.embedding_fn = _STEmbeddingFn(self.embedder)
 
@@ -144,10 +144,10 @@ class RAGEngine:
             # Load JSON cases only if collection is empty (avoid duplicates)
             self._load_initial_cases_if_needed()
 
-            print("✅ RAG engine ready")
+            print("[OK] RAG engine ready")
 
         except Exception as e:
-            print(f"⚠️  RAG init failed: {e}")
+            print(f"[WARN] RAG init failed: {e}")
             print("   Running without RAG support")
             self.enabled = False
 
@@ -165,7 +165,7 @@ class RAGEngine:
 
         experience_file = self._experience_file()
         if not experience_file.exists():
-            print("ℹ️  No existing experience cases found")
+            print("ℹ  No existing experience cases found")
             return
 
         try:
@@ -193,10 +193,10 @@ class RAGEngine:
                 })
 
             self.collection.add(documents=docs, metadatas=metas, ids=ids)
-            print(f"✅ Imported {len(cases)} cases from {experience_file.name}")
+            print(f"[OK] Imported {len(cases)} cases from {experience_file.name}")
 
         except Exception as e:
-            print(f"⚠️  Failed to import experience cases: {e}")
+            print(f"[WARN] Failed to import experience cases: {e}")
 
     def export_to_json(self, path: Optional[Path] = None) -> Path:
         """Export all cases to JSON (full snapshot)."""
@@ -245,7 +245,7 @@ class RAGEngine:
             self._adds_since_save = 0
             self._last_save_ts = now
         except Exception as e:
-            print(f"⚠️  Autosave failed: {e}")
+            print(f"[WARN] Autosave failed: {e}")
 
     # -----------------------------
     # Experiment helpers
@@ -358,7 +358,7 @@ class RAGEngine:
             return out
 
         except Exception as e:
-            print(f"⚠️  RAG retrieval failed: {e}")
+            print(f"[WARN] RAG retrieval failed: {e}")
             return []
 
     def add_successful_case(
@@ -398,7 +398,7 @@ class RAGEngine:
             self._maybe_autosave()
             return case_id
         except Exception as e:
-            print(f"⚠️  Failed to save case: {e}")
+            print(f"[WARN] Failed to save case: {e}")
             return ""
 
     def get_stats(self) -> Dict[str, Any]:

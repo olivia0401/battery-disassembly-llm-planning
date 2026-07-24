@@ -62,27 +62,27 @@ class RobotUI:
         """Initialize ROS2 connection"""
         if not self.system_running:
             try:
-                print("🔧 Initializing system...")
+                print("Initializing system...")
                 self.executor = Executor(use_ros=True)
-                print("   ✅ Executor initialized")
+                print("   [OK] Executor initialized")
 
                 # Backend is configurable via LLM_BACKEND in .env (openai / openrouter / ollama);
                 # defaults to openai so the demo works out of the box with an OpenAI key.
                 backend = os.getenv("LLM_BACKEND", "openai")
                 self.planner = Planner(backend=backend, enable_rag=True)
-                print(f"   ✅ Planner initialized (backend={backend})")
+                print(f"   [OK] Planner initialized (backend={backend})")
 
                 self.validator = Validator()
-                print("   ✅ Validator initialized")
+                print("   [OK] Validator initialized")
 
                 self.system_running = True
-                return "✅ System initialized successfully!"
+                return "[OK] System initialized successfully!"
             except Exception as e:
                 import traceback
-                error_msg = f"❌ Initialization failed: {str(e)}\n{traceback.format_exc()}"
+                error_msg = f"[FAIL] Initialization failed: {str(e)}\n{traceback.format_exc()}"
                 print(error_msg)
                 return error_msg
-        return "⚠️  System already running"
+        return "[WARN] System already running"
 
     def execute_prompt(self, user_prompt, progress=gr.Progress()):
         """Execute user prompt"""
@@ -91,23 +91,23 @@ class RobotUI:
         print(f"{'='*60}\n")
 
         if not self.system_running:
-            result = "❌ Please initialize system first!", "", ""
+            result = "[FAIL] Please initialize system first!", "", ""
             print(f"Returning: {result[0]}")
             return result
 
         if not user_prompt.strip():
-            result = "⚠️  Please enter a command", "", ""
+            result = "[WARN] Please enter a command", "", ""
             print(f"Returning: {result[0]}")
             return result
 
         log = []
-        log.append(f"📝 Your Command: {user_prompt}\n")
+        log.append(f"Your Command: {user_prompt}\n")
 
         start_time = time.time()
 
         # Step 1: Planning (with RAG)
         progress(0.2, desc="Planning...")
-        log.append("🧠 Planning phase started...")
+        log.append("Planning phase started...")
 
         if self.planner.rag and self.planner.rag.enabled:
             log.append("  ├─ Retrieving similar cases from knowledge base...")
@@ -135,13 +135,13 @@ class RobotUI:
 
             log.append(f"  ├─ LLM responded successfully")
             log.append(f"  └─ Generated {num_steps}-step plan")
-            log.append(f"✅ Planning completed\n")
+            log.append(f"[OK] Planning completed\n")
 
         except Exception as e:
             import traceback
             error_trace = traceback.format_exc()
-            log.append(f"  └─ ❌ LLM request failed")
-            log.append(f"❌ Planning failed: {str(e)}")
+            log.append(f"  └─ [FAIL] LLM request failed")
+            log.append(f"[FAIL] Planning failed: {str(e)}")
             print(f"Planning error:\n{error_trace}")
             result = "\n".join(log), "", json.dumps({"error": str(e)}, indent=2)
             print(f"Returning error result")
@@ -149,7 +149,7 @@ class RobotUI:
 
         # Step 2: Validation
         progress(0.4, desc="Validating...")
-        log.append("🔍 Validating plan...")
+        log.append("Validating plan...")
         log.append("  ├─ Checking plan structure...")
         log.append("  ├─ Validating skills and parameters...")
 
@@ -163,7 +163,7 @@ class RobotUI:
         is_valid, errors = self.validator.validate_plan(plan)
 
         if not is_valid:
-            log.append("  └─ ❌ Validation FAILED\n")
+            log.append("  └─ [FAIL] Validation FAILED\n")
             log.append("Validation Errors:")
             for error in errors:
                 log.append(f"  • {error}")
@@ -172,12 +172,12 @@ class RobotUI:
             print(f"Validation failed, returning")
             return result
 
-        log.append("  └─ ✅ All checks passed!")
-        log.append("✅ Plan validation successful\n")
+        log.append("  └─ [OK] All checks passed!")
+        log.append("[OK] Plan validation successful\n")
 
         # Step 3: Execution
         progress(0.6, desc="Executing...")
-        log.append("🚀 Execution phase started...")
+        log.append("Execution phase started...")
         log.append("  ├─ Sending commands to robot...")
 
         plan_text = self._format_plan(plan)
@@ -190,7 +190,7 @@ class RobotUI:
             # Format results
             progress(1.0, desc="Complete!")
             log.append("  └─ Robot execution completed\n")
-            log.append("📊 Execution Results:")
+            log.append("Execution Results:")
             total_steps = results['executed'] + results['failed']
             log.append(f"  ├─ Total steps: {total_steps}")
             log.append(f"  ├─ Successful: {results['executed']}")
@@ -200,7 +200,7 @@ class RobotUI:
                 log.append(f"  └─ Success rate: {success_rate:.0f}%")
 
             if results['success']:
-                log.append("\n🎉 Task completed successfully!")
+                log.append("\nTask completed successfully!")
 
                 # Save to RAG
                 if self.planner.rag and self.planner.rag.enabled:
@@ -211,17 +211,17 @@ class RobotUI:
                             plan=plan,
                             execution_time=execution_time
                         )
-                        log.append(f"💾 Saved to knowledge base (exec time: {execution_time:.1f}s)")
+                        log.append(f"Saved to knowledge base (exec time: {execution_time:.1f}s)")
                     except Exception as e:
-                        log.append(f"⚠️  Failed to save to knowledge base: {e}")
+                        log.append(f"[WARN] Failed to save to knowledge base: {e}")
             else:
-                log.append("\n❌ Task execution failed")
+                log.append("\n[FAIL] Task execution failed")
 
         except Exception as e:
             import traceback
             error_trace = traceback.format_exc()
-            log.append(f"  └─ ❌ Robot communication error")
-            log.append(f"\n❌ Execution error: {str(e)}")
+            log.append(f"  └─ [FAIL] Robot communication error")
+            log.append(f"\n[FAIL] Execution error: {str(e)}")
             print(f"Execution error:\n{error_trace}")
             result = "\n".join(log), plan_text, json.dumps(plan, indent=2)
             print(f"Returning execution error")
@@ -251,7 +251,7 @@ class RobotUI:
             return "No state available"
 
         lines = [
-            "🤖 Current Robot State",
+            "Current Robot State",
             "=" * 50,
             f"Gripper: {state['gripper_state']}",
             "",
@@ -268,7 +268,7 @@ robot_ui = RobotUI()
 # Build Gradio Interface
 with gr.Blocks(title="LLM Robot Control") as demo:
     gr.Markdown("""
-    # 🤖 LLM-Controlled Battery Disassembly Robot (v2)
+    # LLM-Controlled Battery Disassembly Robot (v2)
 
     Control the robot using natural language commands powered by AI.
     """)
@@ -276,51 +276,51 @@ with gr.Blocks(title="LLM Robot Control") as demo:
     with gr.Row():
         with gr.Column(scale=2):
             # Control Panel
-            gr.Markdown("## 🎮 Control Panel")
+            gr.Markdown("## Control Panel")
 
-            init_btn = gr.Button("🔌 Initialize System", variant="primary", size="lg")
+            init_btn = gr.Button("Initialize System", variant="primary", size="lg")
             init_output = gr.Textbox(label="System Status", lines=2)
 
             gr.Markdown("---")
 
             prompt_input = gr.Textbox(
-                label="💬 Command",
+                label="Command",
                 placeholder="Example: Remove the bolt and place it in the tray",
                 lines=2
             )
 
-            execute_btn = gr.Button("▶️ Execute", variant="primary", size="lg")
+            execute_btn = gr.Button("▶ Execute", variant="primary", size="lg")
 
             gr.Markdown("### Quick Commands:")
             with gr.Row():
-                gr.Button("🏠 Go Home", size="sm").click(
+                gr.Button("Go Home", size="sm").click(
                     lambda: "Go to home position",
                     outputs=prompt_input
                 )
-                gr.Button("🔩 Remove Bolt", size="sm").click(
+                gr.Button("Remove Bolt", size="sm").click(
                     lambda: "Remove the bolt and place it in the tray",
                     outputs=prompt_input
                 )
-                gr.Button("👁️ Observe", size="sm").click(
+                gr.Button("Observe", size="sm").click(
                     lambda: "Move to observation position",
                     outputs=prompt_input
                 )
 
         with gr.Column(scale=1):
             # Status Panel
-            gr.Markdown("## 📊 Robot Status")
+            gr.Markdown("## Robot Status")
             state_output = gr.Textbox(label="Current State", lines=12)
-            refresh_btn = gr.Button("🔄 Refresh State")
+            refresh_btn = gr.Button("Refresh State")
 
     # Output Panel
     gr.Markdown("---")
-    gr.Markdown("## 📋 Execution Log")
+    gr.Markdown("## Execution Log")
 
     with gr.Row():
         log_output = gr.Textbox(label="Console Output", lines=15)
         plan_output = gr.Textbox(label="Generated Plan", lines=15)
 
-    with gr.Accordion("📄 Detailed Results (JSON)", open=False):
+    with gr.Accordion("Detailed Results (JSON)", open=False):
         json_output = gr.Code(label="Raw Data", language="json")
 
     # Examples
@@ -355,22 +355,22 @@ with gr.Blocks(title="LLM Robot Control") as demo:
 
     gr.Markdown("""
     ---
-    ### 📖 Instructions:
+    ### Instructions:
     1. Click **Initialize System** first
     2. Enter your command in natural language
     3. Click **Execute** to run
     4. Watch the robot execute in RViz window
 
-    ### ⚙️ Available Actions:
+    ### Available Actions:
     - **Positions**: HOME, approach_bolts, place_bolts
     - **Skills**: moveTo, grasp, release, openGripper, closeGripper
     """)
 
 # Launch
 if __name__ == "__main__":
-    print("🚀 Starting Web UI (V2 - Simplified Async)...")
-    print("📍 Open browser at: http://localhost:7862")
-    print("🤖 Make sure ROS2 system is running!")
+    print("Starting Web UI (V2 - Simplified Async)...")
+    print("Open browser at: http://localhost:7862")
+    print("Make sure ROS2 system is running!")
     print()
 
     demo.launch(

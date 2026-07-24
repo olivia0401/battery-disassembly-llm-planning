@@ -76,13 +76,13 @@ class ResilientInteractiveControl(Node):
         temp_manipulator_client = ActionClient(self, FollowJointTrajectory, manipulator_action_server)
         temp_manipulator_client.wait_for_server()
         self.manipulator_client = temp_manipulator_client
-        self.get_logger().info("✅ [连接线程] 机械臂控制器已连接！")
+        self.get_logger().info("[OK] [连接线程] 机械臂控制器已连接！")
         
         self.get_logger().info(f"[连接线程] 正在等待夹爪 Action Server: {gripper_action_server}...")
         temp_gripper_client = ActionClient(self, FollowJointTrajectory, gripper_action_server)
         temp_gripper_client.wait_for_server()
         self.gripper_client = temp_gripper_client
-        self.get_logger().info("✅ [连接线程] 夹爪控制器已连接！")
+        self.get_logger().info("[OK] [连接线程] 夹爪控制器已连接！")
         
         # 发出信号，告诉主线程服务器已准备就绪
         self.servers_ready.set()

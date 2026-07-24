@@ -72,7 +72,7 @@ class SceneManager:
         while not future.done():
             if time.monotonic() - start > timeout_sec:
                 self.node.get_logger().error(
-                    "⏱️  /apply_planning_scene timed out waiting for a response")
+                    "⏱  /apply_planning_scene timed out waiting for a response")
                 return False
             time.sleep(0.01)
         exc = future.exception()
@@ -95,10 +95,10 @@ class SceneManager:
         bad collision geometry against the gripper and the rest of the scene.
         """
         try:
-            self.node.get_logger().info(f"🔗 Attaching '{object_name}' to '{link_name}'...")
+            self.node.get_logger().info(f"Attaching '{object_name}' to '{link_name}'...")
 
             if not self._planning_scene_client.wait_for_service(timeout_sec=5.0):
-                self.node.get_logger().warn(f"⚠️  Planning scene service not available")
+                self.node.get_logger().warn(f"[WARN] Planning scene service not available")
                 return False
 
             # Create an AttachedCollisionObject message
@@ -156,11 +156,11 @@ class SceneManager:
             request = ApplyPlanningScene.Request()
             request.scene = planning_scene
             if not self._call_and_wait(request):
-                self.node.get_logger().error(f"❌ Attach of '{object_name}' was not confirmed")
+                self.node.get_logger().error(f"[FAIL] Attach of '{object_name}' was not confirmed")
                 return False
 
             self._attached_object = object_name
-            self.node.get_logger().info(f"✅ Attached '{object_name}' to '{link_name}'")
+            self.node.get_logger().info(f"[OK] Attached '{object_name}' to '{link_name}'")
             return True
 
         except Exception as e:
@@ -193,10 +193,10 @@ class SceneManager:
         the table, while removing the attached copy.
         """
         try:
-            self.node.get_logger().info(f"🔓 Releasing '{object_name}' where the gripper let go...")
+            self.node.get_logger().info(f"Releasing '{object_name}' where the gripper let go...")
 
             if not self._planning_scene_client.wait_for_service(timeout_sec=5.0):
-                self.node.get_logger().warn(f"⚠️  Planning scene service not available")
+                self.node.get_logger().warn(f"[WARN] Planning scene service not available")
                 return False
 
             # Use the real attached dims (set by attach_object) so the
@@ -248,7 +248,7 @@ class SceneManager:
             req1 = ApplyPlanningScene.Request()
             req1.scene = ps_detach
             if not self._call_and_wait(req1):
-                self.node.get_logger().error(f"❌ Detach of '{object_name}' was not confirmed")
+                self.node.get_logger().error(f"[FAIL] Detach of '{object_name}' was not confirmed")
                 return False
 
             # Step 2: re-add it to the world at the gripper's released height.
@@ -274,13 +274,13 @@ class SceneManager:
                 req2.scene = ps_place
                 if not self._call_and_wait(req2):
                     self.node.get_logger().error(
-                        f"❌ Re-add of released '{object_name}' to the world was not confirmed")
+                        f"[FAIL] Re-add of released '{object_name}' to the world was not confirmed")
                     return False
 
             self._attached_object = None
             self._attached_dims = None
             where = tuple(round(v, 3) for v in place_pose) if place_pose else "(removed)"
-            self.node.get_logger().info(f"✅ Released '{object_name}' at {where}")
+            self.node.get_logger().info(f"[OK] Released '{object_name}' at {where}")
             return True
 
         except Exception as e:

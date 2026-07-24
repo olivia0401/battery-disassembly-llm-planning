@@ -360,7 +360,7 @@ class RQ3Experiment:
 
                         self.results.append(result)
 
-                        status = "✓" if result.success else "✗"
+                        status = "[OK]" if result.success else "[FAIL]"
                         print(f"[{status}] {result.planning_time:.2f}s ({progress:.1f}%)")
 
                         if current_test % 50 == 0:
@@ -436,7 +436,7 @@ async def main_async():
 
     try:
         await experiment.run_all_trials()
-        print("\n✓ RQ3 Experiment completed!")
+        print("\n[OK] RQ3 Experiment completed!")
         print(f"  Results: {results_dir}")
     except KeyboardInterrupt:
         print("\n\nInterrupted.")

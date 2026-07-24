@@ -88,7 +88,7 @@ class LLMClient:
 
         # 检查API key
         if self.config["requires_key"] and not self.api_key:
-            print(f"⚠️  Warning: {backend} requires API key but none provided")
+            print(f"[WARN] Warning: {backend} requires API key but none provided")
 
     async def generate(self, prompt: str, temperature: float = 0.3,
                        max_tokens: int = 256) -> str:

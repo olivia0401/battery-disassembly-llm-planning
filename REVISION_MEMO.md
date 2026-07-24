@@ -4,7 +4,7 @@
 **日期**: 2026-06-09
 **依据**: (a) 全量代码审核; (b) 用严谨指标重算现有实验数据; (c) 导师评语
 
-> ## ⚠️ 本文件是 2026-06-09 时点的快照，已被后续工作部分取代
+> ## 本文件是 2026-06-09 时点的快照，已被后续工作部分取代
 >
 > 本文件下方记录的数字（RAG/validation 无统计显著差异、FV recall≈14%）来自当时那批**已知存在缺陷**的实验运行（见下方前提）。之后又完成了一轮独立的修复与重跑：
 >
@@ -148,7 +148,7 @@
 
 去泄漏干净复跑**已完成**（见 3.4），下列工作把它从"方向确认"提升到"可发表"：
 
-1. ✅ **去泄漏重跑（已完成，小规模）**：`prompt_clean.txt` + 15 条不相交记忆 + 本地 Ollama 已跑通。**扩大规模**只需一条命令（建议更强模型 + 更多 trials）：
+1. **去泄漏重跑（已完成，小规模）**：`prompt_clean.txt` + 15 条不相交记忆 + 本地 Ollama 已跑通。**扩大规模**只需一条命令（建议更强模型 + 更多 trials）：
    `python run_fast.py --rq all --leakfree --trials 10 --backend ollama`（或换 `OLLAMA_MODEL` 为更强模型）
 2. **人工复核参考计划**（`reference_plans.json` 标了 23 条待复核）+ 填 `Result_robot.xlsx` Tab 4 → `python -m eval.compute_kappa`。
 3. （可选，回应导师"机器人深度"）RQ4：MoveIt 可行性 + 感知噪声扫描（RViz，无需真机）。
@@ -189,12 +189,12 @@
 
 **最终验证**（冷启动，全自动，无需任何手动补丁脚本）：
 ```
-✅ ACM updated (merged): disabled gripper-wrist collisions without touching the other 15 entries
-✅ Skill Server Ready!
+ACM updated (merged): disabled gripper-wrist collisions without touching the other 15 entries
+Skill Server Ready!
 ... [真实 RRTConnect 规划 + fake_manipulator_controller 执行] ...
-✅ Planning successful! Executing trajectory on controller...
-✅ Trajectory executed successfully in 2.46s!
-📤 Feedback(/success): Skill 'moveTo' completed
+Planning successful! Executing trajectory on controller...
+Trajectory executed successfully in 2.46s!
+Feedback(/success): Skill 'moveTo' completed
 ```
 
 **对论文的意义**：这不再是"承认没做、列为未来工作"，而是有完整定位过程+前后对比日志的真实工程修复。可以直接用于回应导师"应使用动态运动规划而非固定路点"的意见——附带说明：① 为什么原来选择绕开 MoveIt（第 2/3 条 bug 导致任何近物体的规划请求必然失败）；② 5 个 bug 各自的定位方法（`/check_state_validity` 服务直接查询碰撞对、ACM 参数比对、日志时间戳交叉验证），这套排查方法本身也可以写成方法论小节。

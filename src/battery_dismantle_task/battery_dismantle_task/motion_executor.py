@@ -75,11 +75,11 @@ class MotionExecutor:
 
     def plan_execute_arm(self, joints, where):
         """Plan and execute arm motion to target joint positions"""
-        self.node.get_logger().info(f"🚀 Executing arm motion for: {where}")
+        self.node.get_logger().info(f"Executing arm motion for: {where}")
 
         # Method 6: Use direct trajectory execution (bypass MoveIt planning)
         if self.use_direct_execution:
-            self.node.get_logger().info("🔧 Method 6: Using direct trajectory execution (GitHub method)")
+            self.node.get_logger().info("Method 6: Using direct trajectory execution (GitHub method)")
             return self._execute_direct_trajectory(joints, where)
 
         # REMOVED: rclpy.spin_once(self.node, timeout_sec=0.5) used to be here.
@@ -384,14 +384,14 @@ class MotionExecutor:
     def _execute_trajectory(self, result):
         """Execute planned trajectory on controller"""
         if result.error_code.val == 1:  # SUCCESS
-            self.node.get_logger().info(f"✅ Planning successful! Executing trajectory on controller...")
+            self.node.get_logger().info(f"[OK] Planning successful! Executing trajectory on controller...")
 
             trajectory = result.planned_trajectory.joint_trajectory
             execute_goal = FollowJointTrajectory.Goal()
             execute_goal.trajectory = trajectory
 
             duration = self._extract_trajectory_duration(result)
-            self.node.get_logger().info(f"📤 Sending trajectory to controller (duration: {duration:.2f}s)...")
+            self.node.get_logger().info(f"Sending trajectory to controller (duration: {duration:.2f}s)...")
 
             # Send goal to controller
             execute_future = self._manipulator_controller_client.send_goal_async(execute_goal)
@@ -409,7 +409,7 @@ class MotionExecutor:
                 self.node.get_logger().error("Controller rejected trajectory!")
                 return False
 
-            self.node.get_logger().info("✅ Controller accepted trajectory, executing...")
+            self.node.get_logger().info("[OK] Controller accepted trajectory, executing...")
 
             # Wait for execution to complete
             exec_result_future = exec_goal_handle.get_result_async()
@@ -424,7 +424,7 @@ class MotionExecutor:
 
             exec_result = exec_result_future.result().result
             if exec_result.error_code == 0:  # SUCCESS
-                self.node.get_logger().info(f"✅ Trajectory executed successfully in {time.time() - exec_start:.2f}s!")
+                self.node.get_logger().info(f"[OK] Trajectory executed successfully in {time.time() - exec_start:.2f}s!")
                 return True
             else:
                 self.node.get_logger().error(f"Execution failed with error code: {exec_result.error_code}")
@@ -464,7 +464,7 @@ class MotionExecutor:
         Build trajectory directly and execute without MoveIt planning
         This bypasses collision checking and state validation
         """
-        self.node.get_logger().info(f"📦 Building direct trajectory to: {where}")
+        self.node.get_logger().info(f"Building direct trajectory to: {where}")
 
         # Build JointTrajectory message
         trajectory = JointTrajectory()
@@ -501,7 +501,7 @@ class MotionExecutor:
         goal = FollowJointTrajectory.Goal()
         goal.trajectory = trajectory
 
-        self.node.get_logger().info(f"🚀 Sending direct trajectory to controller (duration: {duration_sec:.2f}s)...")
+        self.node.get_logger().info(f"Sending direct trajectory to controller (duration: {duration_sec:.2f}s)...")
 
         # Send goal to controller
         send_future = self._manipulator_controller_client.send_goal_async(goal)
@@ -510,16 +510,16 @@ class MotionExecutor:
         start_time = time.time()
         while not send_future.done():
             if time.time() - start_time > 5.0:
-                self.node.get_logger().error("❌ Timeout waiting for controller to accept trajectory!")
+                self.node.get_logger().error("[FAIL] Timeout waiting for controller to accept trajectory!")
                 return False
             time.sleep(0.01)
 
         goal_handle = send_future.result()
         if not goal_handle.accepted:
-            self.node.get_logger().error("❌ Controller rejected direct trajectory!")
+            self.node.get_logger().error("[FAIL] Controller rejected direct trajectory!")
             return False
 
-        self.node.get_logger().info("✅ Controller accepted direct trajectory, executing...")
+        self.node.get_logger().info("[OK] Controller accepted direct trajectory, executing...")
 
         # Wait for execution to complete
         result_future = goal_handle.get_result_async()
@@ -528,17 +528,17 @@ class MotionExecutor:
 
         while not result_future.done():
             if time.time() - exec_start > timeout:
-                self.node.get_logger().error(f"❌ Timeout waiting for direct execution to complete!")
+                self.node.get_logger().error(f"[FAIL] Timeout waiting for direct execution to complete!")
                 return False
             time.sleep(0.01)
 
         result = result_future.result().result
         if result.error_code == 0:  # SUCCESS
-            self.node.get_logger().info(f"✅ Direct trajectory executed successfully in {time.time() - exec_start:.2f}s!")
-            self.node.get_logger().info(f"🎯 Reached target: {where}")
+            self.node.get_logger().info(f"[OK] Direct trajectory executed successfully in {time.time() - exec_start:.2f}s!")
+            self.node.get_logger().info(f"Reached target: {where}")
             return True
         else:
-            self.node.get_logger().error(f"❌ Direct execution failed with error code: {result.error_code}")
+            self.node.get_logger().error(f"[FAIL] Direct execution failed with error code: {result.error_code}")
             return False
 
     def plan_execute_gripper(self, joints, where):
@@ -549,7 +549,7 @@ class MotionExecutor:
         CLOSE=0.8 from config/waypoints.json. Previously this was a no-op sleep,
         so the fingers never visibly moved; now they actually open/close.
         """
-        self.node.get_logger().info(f"🚀 Executing gripper motion for: {where}")
+        self.node.get_logger().info(f"Executing gripper motion for: {where}")
         if not joints:
             self.node.get_logger().warn("gripper: no target position given")
             return False
@@ -587,5 +587,5 @@ class MotionExecutor:
             if time.time() - start > 4.0:
                 break  # don't fail the skill on a slow gripper result
             time.sleep(0.01)
-        self.node.get_logger().info(f"✅ Gripper '{where}' -> {target:.2f}")
+        self.node.get_logger().info(f"[OK] Gripper '{where}' -> {target:.2f}")
         return True

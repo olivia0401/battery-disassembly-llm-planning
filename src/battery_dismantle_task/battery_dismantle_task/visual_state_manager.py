@@ -133,7 +133,7 @@ class VisualStateManager(Node):
         # 定时器：更新attached object位姿（10Hz）- 已禁用，改为仅在grasp时创建一次
         # self.update_timer = self.create_timer(0.1, self.update_attached_object)
 
-        self.get_logger().info('✅ Visual State Manager ready!')
+        self.get_logger().info('[OK] Visual State Manager ready!')
 
     def command_callback(self, msg):
         """处理LLM命令，提取当前操作的目标物体"""
@@ -150,7 +150,7 @@ class VisualStateManager(Node):
 
             if target and target in self.object_definitions:
                 self.current_target = target
-                self.get_logger().info(f"📝 当前目标: {target}")
+                self.get_logger().info(f"当前目标: {target}")
         except Exception as e:
             self.get_logger().debug(f"Command parse error: {e}")
 
@@ -175,7 +175,7 @@ class VisualStateManager(Node):
             import time
             time.sleep(0.1)  # 给MoveIt时间处理
 
-        self.get_logger().info('🧹 已清除残留attached objects')
+        self.get_logger().info('已清除残留attached objects')
 
     def initialize_scene(self):
         """初始化场景：创建所有collision objects"""
@@ -255,13 +255,13 @@ class VisualStateManager(Node):
             future = self.scene_client.call_async(req)
             rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
             if future.result() and future.result().success:
-                self.get_logger().info('✅ 成功创建场景对象: TopCoverBolts, BatteryBox_0')
+                self.get_logger().info('[OK] 成功创建场景对象: TopCoverBolts, BatteryBox_0')
                 created = True
                 break
-            self.get_logger().warn(f'⚠️  场景对象创建未确认 (尝试 {attempt}/6)，重试...')
+            self.get_logger().warn(f'[WARN] 场景对象创建未确认 (尝试 {attempt}/6)，重试...')
             time.sleep(1.0)
         if not created:
-            self.get_logger().error('❌ 创建场景对象失败（已重试6次）')
+            self.get_logger().error('[FAIL] 创建场景对象失败（已重试6次）')
 
     def create_collision_object(self, object_id, dimensions, pose_dict):
         """创建collision object"""
@@ -304,10 +304,10 @@ class VisualStateManager(Node):
 
                     # 使用current_target（从command_callback中设置）
                     if self.current_target and self.current_target in self.object_definitions:
-                        self.get_logger().info(f"🤏 检测到抓取成功: {self.current_target}")
+                        self.get_logger().info(f"检测到抓取成功: {self.current_target}")
                         self.attach_object_visual(self.current_target)
                     else:
-                        self.get_logger().warn(f"⚠️ 抓取成功但没有当前目标或目标未定义: {self.current_target}")
+                        self.get_logger().warn(f"[WARN] 抓取成功但没有当前目标或目标未定义: {self.current_target}")
 
                 # 检查release成功
                 elif (feedback_json.get('status') == 'success' and
@@ -315,22 +315,22 @@ class VisualStateManager(Node):
                       'completed' in message_lower):
 
                     if self.grasped_object:
-                        self.get_logger().info(f"✋ 检测到放置成功: {self.grasped_object}")
+                        self.get_logger().info(f"检测到放置成功: {self.grasped_object}")
                         self.detach_object_visual(self.grasped_object)
                     else:
-                        self.get_logger().warn(f"⚠️ 放置成功但没有已抓取物体")
+                        self.get_logger().warn(f"[WARN] 放置成功但没有已抓取物体")
 
             except json.JSONDecodeError:
                 # 旧格式兼容
                 data_lower = data.lower()
                 if 'grasp' in data_lower and 'completed' in data_lower:
                     if self.current_target and self.current_target in self.object_definitions:
-                        self.get_logger().info(f"🤏 检测到抓取成功: {self.current_target}")
+                        self.get_logger().info(f"检测到抓取成功: {self.current_target}")
                         self.attach_object_visual(self.current_target)
 
                 elif 'release' in data_lower and 'completed' in data_lower:
                     if self.grasped_object:
-                        self.get_logger().info(f"✋ 检测到放置成功: {self.grasped_object}")
+                        self.get_logger().info(f"检测到放置成功: {self.grasped_object}")
                         self.detach_object_visual(self.grasped_object)
 
         except Exception as e:
@@ -341,12 +341,12 @@ class VisualStateManager(Node):
         # 标记为已抓取，update_attached_object定时器会创建跟随夹爪的物体
         self.grasped_object = object_id
         self.original_removed = False  # 重置标志
-        self.get_logger().info(f"  ✅ {object_id} 标记为已抓取（将跟随夹爪）")
+        self.get_logger().info(f"  [OK] {object_id} 标记为已抓取（将跟随夹爪）")
 
     def detach_object_visual(self, object_id):
         """放置由 scene_manager.detach_object 处理 (把零件留在夹爪松开处的桌面上)。
         这里不再在固定点重建物体——那正是之前"零件瞬移到地面"的来源。仅清状态。"""
-        self.get_logger().info(f"  ✅ {object_id} 放置由 scene_manager 处理 (留在夹爪松开处)")
+        self.get_logger().info(f"  [OK] {object_id} 放置由 scene_manager 处理 (留在夹爪松开处)")
         self.grasped_object = None
 
     def update_attached_object(self):
@@ -400,7 +400,7 @@ class VisualStateManager(Node):
                 original_obj.operation = CollisionObject.REMOVE
                 req.scene.world.collision_objects.append(original_obj)
                 self.original_removed = True
-                self.get_logger().info(f"  🔄 移除原物体 {self.grasped_object}，创建跟随版本")
+                self.get_logger().info(f"  移除原物体 {self.grasped_object}，创建跟随版本")
 
             # 异步调用（不等待结果，避免阻塞）
             self.scene_client.call_async(req)

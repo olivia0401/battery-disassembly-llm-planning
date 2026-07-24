@@ -70,13 +70,13 @@ class Planner:
                 if self.rag_source is not None or rag_limit is not None:
                     loaded = self.rag.load_from_json(path=self.rag_source,
                                                      limit=rag_limit, seed=rag_seed)
-                    print(f"✅ RAG enabled (source={self.rag_source.name if self.rag_source else 'default'}, "
+                    print(f"[OK] RAG enabled (source={self.rag_source.name if self.rag_source else 'default'}, "
                           f"limit={rag_limit}, seed={rag_seed}): loaded {loaded} cases")
                 else:
                     stats = self.rag.get_stats()
-                    print(f"✅ RAG enabled: {stats.get('total_cases', 0)} cases in KB")
+                    print(f"[OK] RAG enabled: {stats.get('total_cases', 0)} cases in KB")
             except Exception as e:
-                print(f"⚠️  RAG init failed: {e}")
+                print(f"[WARN] RAG init failed: {e}")
                 self.rag = None
 
     async def plan(self, task: str, use_llm: bool = True) -> Dict[str, Any]:
@@ -105,8 +105,8 @@ class Planner:
 
         prompt = self._build_prompt(task, rag_context)
 
-        print(f"🤖 Planning: {task}")
-        print("📡 Calling LLM...")
+        print(f"Planning: {task}")
+        print("Calling LLM...")
 
         try:
             response = await self.llm.generate(prompt, temperature=self.temperature)
@@ -124,8 +124,8 @@ class Planner:
         except Exception as e:
             # str(e) is empty for some exceptions (notably asyncio.TimeoutError),
             # which made every timeout look like a blank, unexplained failure.
-            print(f"❌ LLM planning failed: {type(e).__name__}: {e}")
-            print("🔄 Falling back to demo plan...")
+            print(f"[FAIL] LLM planning failed: {type(e).__name__}: {e}")
+            print("Falling back to demo plan...")
             plan = self._demo_plan(task)
 
             return self._attach_meta(
@@ -146,7 +146,7 @@ class Planner:
         try:
             return self.rag.retrieve_similar_cases(task, n_results=self.rag_topk)
         except Exception as e:
-            print(f"⚠️  RAG retrieval failed: {e}")
+            print(f"[WARN] RAG retrieval failed: {e}")
             return []
 
     # -----------------------------
@@ -281,7 +281,7 @@ class Planner:
                 ]
             }
 
-        print(f"⚠️  Unrecognized command '{task}', returning safe default (moveTo HOME)")
+        print(f"[WARN] Unrecognized command '{task}', returning safe default (moveTo HOME)")
         return {"plan": [{"step": 1, "name": "moveTo", "params": {"target": "HOME"}}]}
 
     # -----------------------------
@@ -336,12 +336,12 @@ class Planner:
         return plan
 
     def print_plan(self, plan: Dict[str, Any]) -> None:
-        print("\n✅ Generated Plan:")
+        print("\n[OK] Generated Plan:")
         for action in plan.get("plan", []):
             print(f"  Step {action.get('step')}: {action.get('name')}({action.get('params')})")
         meta = plan.get("meta", {})
         if meta:
-            print(f"\nℹ️  Meta: mode={meta.get('planner_mode')} rag_used={meta.get('rag_used')} "
+            print(f"\nℹ  Meta: mode={meta.get('planner_mode')} rag_used={meta.get('rag_used')} "
                   f"planning_s={meta.get('timing',{}).get('planning_wall_s')}")
 
 

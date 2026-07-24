@@ -277,7 +277,7 @@ def main():
               f"({100*ci['p']:.1f}% [{100*ci['lo']:.1f}, {100*ci['hi']:.1f}]) "
               f"-- 'caught' means the plan FAILED to execute (good: dispatch-level check worked).")
         for r in defense_rows:
-            tag = "caught (failed to execute)" if not r["success"] else "⚠️ NOT caught (executed anyway)"
+            tag = "caught (failed to execute)" if not r["success"] else "[WARN] NOT caught (executed anyway)"
             print(f"    {r['command']:45} {tag}")
 
 

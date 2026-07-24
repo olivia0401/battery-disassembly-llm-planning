@@ -56,10 +56,10 @@ class RuleBasedValidation:
 
 | 级别 | Schema 检查 | Rule 检查 | 说明 |
 |------|------------|-----------|------|
-| NV   | ❌         | ❌        | 无任何验证 |
-| SV   | ✅         | ❌        | 只检查技能名称、参数类型 |
-| RV   | ❌         | ✅        | 只检查序列约束（如禁止连续release） |
-| FV   | ✅         | ✅        | 完整验证（两层都检查） |
+| NV   |         |        | 无任何验证 |
+| SV   |         |        | 只检查技能名称、参数类型 |
+| RV   |         |        | 只检查序列约束（如禁止连续release） |
+| FV   |         |        | 完整验证（两层都检查） |
 
 ## 运行时间估算
 
@@ -94,7 +94,7 @@ python3 run_rq2_safety.py --commands my_test_suite.json --trials 3
 
 语法检查通过：
 ```bash
-✓ Syntax check passed
+Syntax check passed
 ```
 
 ## 注意事项

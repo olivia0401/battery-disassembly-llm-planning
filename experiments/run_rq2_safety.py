@@ -324,10 +324,10 @@ class RQ2Experiment:
                     # Expected behavior
                     if is_unsafe:
                         # Should be caught
-                        status = "✓ CAUGHT" if not result.plan_valid else "✗ MISSED"
+                        status = "[OK] CAUGHT" if not result.plan_valid else "[FAIL] MISSED"
                     else:
                         # Should pass
-                        status = "✓ PASS" if result.plan_valid else "✗ REJECT"
+                        status = "[OK] PASS" if result.plan_valid else "[FAIL] REJECT"
 
                     print(f"[{status}] {result.validation_time*1000:.1f}ms ({progress:.1f}%)")
 
@@ -399,7 +399,7 @@ async def main_async():
 
     try:
         await experiment.run_all_trials()
-        print("\n✓ RQ2 Experiment completed!")
+        print("\n[OK] RQ2 Experiment completed!")
         print(f"  Results: {results_dir}")
     except KeyboardInterrupt:
         print("\n\nInterrupted.")

@@ -530,7 +530,7 @@ def analyze_rq5():
 
 
 def main():
-    # The console digest below prints ⚠ and other non-ASCII. On Windows, stdout
+    # The console digest below prints  and other non-ASCII. On Windows, stdout
     # defaults to the ANSI codepage (cp936/GBK on a Chinese locale), which has
     # no mapping for U+26A0 — so `python -m eval.analyze > log.txt` died with a
     # UnicodeEncodeError and exit 1. analysis_summary.json is written before the
@@ -554,7 +554,7 @@ def main():
     }
     fb = sum(v.get("fallback_demo", 0) + v.get("error", 0) for v in prov.values())
     if fb:
-        print(f"⚠️  WARNING: {fb} rows are demo-fallback/error (not real LLM output). "
+        print(f"[WARN] WARNING: {fb} rows are demo-fallback/error (not real LLM output). "
               f"See data_provenance in the summary.")
     out = Path(__file__).parent / "analysis_summary.json"
     out.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
@@ -574,7 +574,7 @@ def main():
                 continue
             h = v.get("holm") or {}
             sig = "significant" if h.get("significant") else "NOT significant after correction"
-            warn = "  ⚠️ uneven dropout — comparing different survivor subsets" if v.get("uneven_dropout_warning") else ""
+            warn = "  [WARN] uneven dropout — comparing different survivor subsets" if v.get("uneven_dropout_warning") else ""
             print(f"    {k}: p={v['p_value']:.4f} -> p_holm={h.get('p_corrected', float('nan')):.4f} ({sig}){warn}")
         loo = summary["rq1"].get("leave_one_command_out")
         if loo:
@@ -584,7 +584,7 @@ def main():
         no_noise_data = [cfg for cfg, c in summary["rq1"]["per_config"].items()
                           if c.get("noise_floor_exact") is None]
         if no_noise_data:
-            print(f"  ⚠️  No repeated-trial noise-floor data for: {no_noise_data} "
+            print(f"  [WARN] No repeated-trial noise-floor data for: {no_noise_data} "
                   f"(needs trials>=2 per command; rerun with --trials 3+ before treating "
                   f"p-values above as final).")
     if summary.get("rq2"):
@@ -629,7 +629,7 @@ def main():
                 return f"{100*p['p']:5.1f}% (n={c['n']})"
             print(f"  {lvl:6} {fmt(cell['rag_on']):>18}   {fmt(cell['rag_off']):>18}")
         if fac["untested_rag_off_levels"]:
-            print(f"  ⚠️  RAG=off was never run through {fac['untested_rag_off_levels']} "
+            print(f"  [WARN] RAG=off was never run through {fac['untested_rag_off_levels']} "
                   f"validation levels in any experiment -- those cells are honestly "
                   f"'not tested', not estimated.")
     if summary.get("rq4"):

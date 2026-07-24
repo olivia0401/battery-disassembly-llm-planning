@@ -494,7 +494,7 @@ class RQ2Experiment:
                         self.results.append(result)
 
                         # Print result
-                        status = "✓ PASS" if result.success else "✗ FAIL"
+                        status = "[OK] PASS" if result.success else "[FAIL] FAIL"
                         print(f"[{status}] {result.planning_time:.2f}s ({progress:.1f}%)")
 
                         # Save intermediate results every 50 tests
@@ -576,7 +576,7 @@ def main():
     # Run experiment
     try:
         experiment.run_all_trials()
-        print("\n✓ Experiment completed successfully!")
+        print("\n[OK] Experiment completed successfully!")
         print(f"  Results: {results_dir}")
         print(f"  Total trials: {len(experiment.results)}")
     except KeyboardInterrupt:

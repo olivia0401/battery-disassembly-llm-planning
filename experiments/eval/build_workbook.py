@@ -52,7 +52,7 @@ def sig_holm(v):
     if not h:
         return sig(v.get("p_value"))
     tag = "(sig. after Holm)" if h["significant"] else "(n.s. after Holm)"
-    note = " ⚠️ uneven dropout" if v.get("uneven_dropout_warning") else ""
+    note = " [WARN] uneven dropout" if v.get("uneven_dropout_warning") else ""
     return f"p={h['p_raw']:.3f} -> p_holm={h['p_corrected']:.3f} {tag}{note}"
 
 
@@ -220,7 +220,7 @@ def tab_analysis(wb):
         no_noise = [c for c, v in rq1["per_config"].items() if v.get("noise_floor_exact") is None]
         if no_noise:
             ws.cell(row=r, column=1,
-                    value=f"⚠️ No repeated-trial noise-floor data for: {', '.join(no_noise)} "
+                    value=f"[WARN] No repeated-trial noise-floor data for: {', '.join(no_noise)} "
                           f"(needs trials>=2 per command to measure run-to-run wobble; "
                           f"differences below the noise floor are ties, not findings).").font = Font(italic=True, color="C00000")
             r += 2

@@ -53,7 +53,7 @@ class Executor:
             10
         )
 
-        print("✅ ROS2 executor initialized")
+        print("[OK] ROS2 executor initialized")
 
         # Wait for topic connections to establish
         print("⏳ Waiting for skill_server connection...")
@@ -61,12 +61,12 @@ class Executor:
 
         # Spin once to process any pending callbacks
         rclpy.spin_once(self.node, timeout_sec=0.1)
-        print("✅ Ready to send commands")
+        print("[OK] Ready to send commands")
 
     def _feedback_callback(self, msg):
         """Receive feedback"""
         self.last_feedback = msg.data
-        print(f"   📥 Feedback: {msg.data}")
+        print(f"   Feedback: {msg.data}")
 
     def _joint_state_callback(self, msg: JointState):
         """Receive joint state updates"""
@@ -96,16 +96,16 @@ class Executor:
             "log": []
         }
 
-        print(f"\n🚀 Executing plan ({len(actions)} steps)...")
+        print(f"\nExecuting plan ({len(actions)} steps)...")
 
         for i, action in enumerate(actions, 1):
             skill = action['name']
             target = action['params'].get('target', None)
 
             if target:
-                print(f"\n📍 Step {i}/{len(actions)}: {skill}(target={target})")
+                print(f"\nStep {i}/{len(actions)}: {skill}(target={target})")
             else:
-                print(f"\n📍 Step {i}/{len(actions)}: {skill}()")
+                print(f"\nStep {i}/{len(actions)}: {skill}()")
 
             if self.use_ros:
                 success = self._execute_ros(action, timeout)
@@ -123,17 +123,17 @@ class Executor:
 
             if success:
                 results['executed'] += 1
-                print(f"   ✅ Success")
+                print(f"   [OK] Success")
             else:
                 results['failed'] += 1
                 results['success'] = False
-                print(f"   ❌ Failed")
+                print(f"   [FAIL] Failed")
                 # 是否继续?
                 break
 
             time.sleep(0.5)  # 短暂延迟
 
-        print(f"\n📊 Execution Summary:")
+        print(f"\nExecution Summary:")
         print(f"   Total: {len(actions)}")
         print(f"   Executed: {results['executed']}")
         print(f"   Failed: {results['failed']}")
@@ -156,7 +156,7 @@ class Executor:
         msg = String()
         msg.data = json.dumps(command)
         self.command_pub.publish(msg)
-        print(f"   📤 Published command: {msg.data}")
+        print(f"   Published command: {msg.data}")
 
         # 等待反馈
         self.last_feedback = None
@@ -166,7 +166,7 @@ class Executor:
             rclpy.spin_once(self.node, timeout_sec=0.1)
 
             if time.time() - start_time > timeout:
-                print(f"   ⏱️  Timeout after {timeout}s")
+                print(f"   ⏱  Timeout after {timeout}s")
                 return False
 
         # 解析JSON反馈: {"status": "success", "message": "...", "timestamp": ...}
@@ -211,10 +211,10 @@ class Executor:
                 'disconnect': 'connector_tight'
             }
             reason = failure_reasons.get(skill_name, 'execution_timeout')
-            print(f"   ❌ Mock execution FAILED: {reason}")
+            print(f"   [FAIL] Mock execution FAILED: {reason}")
             return False
 
-        print(f"   ✅ Mock execution")
+        print(f"   [OK] Mock execution")
         return True
 
     def get_current_state(self) -> Optional[Dict]:
@@ -257,10 +257,10 @@ class Executor:
         state = self.get_current_state()
 
         if state is None:
-            print("❌ No state available")
+            print("[FAIL] No state available")
             return
 
-        print("\n📊 Current Robot State:")
+        print("\nCurrent Robot State:")
         print(f"   Gripper: {state['gripper_state']}")
         print(f"   Arm Joints:")
         for joint, pos in state['arm_joints'].items():

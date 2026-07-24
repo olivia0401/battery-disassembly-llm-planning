@@ -72,7 +72,7 @@ rq2_by_level['rejection_rate'] = ((rq2_by_level['total_trials'] - rq2_by_level['
 rq2_by_level['false_positive_rate'] = (rq2_by_level['false_positive'] / rq2_by_level['total_trials'] * 100).round(2)
 rq2_by_level['avg_validation_ms'] = (rq2_by_level['validation_time'] * 1000).round(2)
 
-print("\n📊 Validation Level Performance:")
+print("\nValidation Level Performance:")
 print(rq2_by_level[['total_trials', 'plan_valid', 'validity_rate', 'rejection_rate', 'false_positive_rate', 'avg_validation_ms']].to_string())
 
 # Breakdown by category
@@ -82,7 +82,7 @@ rq2_by_category = df_rq2.groupby(['validation_level', 'category']).agg({
 }).rename(columns={'trial_id': 'total'})
 rq2_by_category['validity_rate'] = (rq2_by_category['plan_valid'] / rq2_by_category['total'] * 100).round(2)
 
-print("\n📊 Validation by Command Category:")
+print("\nValidation by Command Category:")
 print(rq2_by_category.to_string())
 
 # Plot RQ2
@@ -120,7 +120,7 @@ for bar, rate in zip(bars2, fp_rates):
 
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / 'rq2_validation_effectiveness.png', dpi=300, bbox_inches='tight')
-print(f"\n✓ Saved: {OUTPUT_DIR / 'rq2_validation_effectiveness.png'}")
+print(f"\n[OK] Saved: {OUTPUT_DIR / 'rq2_validation_effectiveness.png'}")
 
 # ============================================================================
 # RQ3 ANALYSIS: Memory Size Impact
@@ -145,7 +145,7 @@ rq3_by_memory['avg_planning_ms'] = (rq3_by_memory['planning_time'] * 1000).round
 rq3_by_memory['avg_retrieval_ms'] = (rq3_by_memory['retrieval_time'] * 1000).round(2)
 rq3_by_memory['avg_similarity'] = (rq3_by_memory['max_similarity'] * 100).round(2)
 
-print("\n📊 Performance by Memory Size:")
+print("\nPerformance by Memory Size:")
 print(rq3_by_memory[['total_trials', 'success', 'success_rate', 'validity_rate', 'avg_planning_ms', 'avg_similarity']].to_string())
 
 # Seen vs Unseen performance (for N>0)
@@ -157,7 +157,7 @@ rq3_seen_analysis = df_rq3_with_memory.groupby('is_seen').agg({
 }).rename(columns={'trial_id': 'total'})
 rq3_seen_analysis['success_rate'] = (rq3_seen_analysis['success'] / rq3_seen_analysis['total'] * 100).round(2)
 
-print("\n📊 Seen vs. Unseen Command Performance (N>0):")
+print("\nSeen vs. Unseen Command Performance (N>0):")
 print(rq3_seen_analysis[['total', 'success', 'success_rate']].to_string())
 
 # Plot RQ3
@@ -194,7 +194,7 @@ for x, y in zip([str(n) for n in memory_sizes], retrieval_times):
 
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / 'rq3_memory_impact.png', dpi=300, bbox_inches='tight')
-print(f"✓ Saved: {OUTPUT_DIR / 'rq3_memory_impact.png'}")
+print(f"[OK] Saved: {OUTPUT_DIR / 'rq3_memory_impact.png'}")
 
 # ============================================================================
 # RQ1 ANALYSIS: Configuration Ablation
@@ -223,12 +223,12 @@ rq1_by_config['avg_total_ms'] = (rq1_by_config['total_time'] * 1000).round(2)
 config_order = ['SB', 'LO', 'LV', 'LR', 'FS']
 rq1_by_config = rq1_by_config.reindex(config_order)
 
-print("\n📊 Performance by Configuration:")
+print("\nPerformance by Configuration:")
 print(rq1_by_config[['total_trials', 'success', 'success_rate', 'validity_rate', 'avg_planning_ms', 'avg_total_ms']].to_string())
 
 # Error analysis
 rq1_errors = df_rq1[df_rq1['success'] == False].groupby(['configuration', 'error_type']).size().unstack(fill_value=0)
-print("\n📊 Error Distribution by Configuration:")
+print("\nError Distribution by Configuration:")
 print(rq1_errors.to_string())
 
 # Plot RQ1
@@ -265,7 +265,7 @@ for bar, time in zip(bars2, total_times):
 
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / 'rq1_ablation_study.png', dpi=300, bbox_inches='tight')
-print(f"✓ Saved: {OUTPUT_DIR / 'rq1_ablation_study.png'}")
+print(f"[OK] Saved: {OUTPUT_DIR / 'rq1_ablation_study.png'}")
 
 # ============================================================================
 # COMPREHENSIVE SUMMARY REPORT
@@ -429,7 +429,7 @@ report_path = OUTPUT_DIR / 'COMPREHENSIVE_ANALYSIS_REPORT.md'
 with open(report_path, 'w') as f:
     f.write(report)
 
-print(f"✓ Saved: {report_path}")
+print(f"[OK] Saved: {report_path}")
 
 # Save summary statistics as JSON
 summary_stats = {
@@ -457,15 +457,15 @@ json_path = OUTPUT_DIR / 'summary_statistics.json'
 with open(json_path, 'w') as f:
     json.dump(summary_stats, f, indent=2)
 
-print(f"✓ Saved: {json_path}")
+print(f"[OK] Saved: {json_path}")
 
 print(f"\n{'='*70}")
-print("✓ Analysis Complete!")
+print("[OK] Analysis Complete!")
 print(f"{'='*70}")
 print(f"\nOutput files:")
-print(f"  📊 {OUTPUT_DIR / 'rq2_validation_effectiveness.png'}")
-print(f"  📊 {OUTPUT_DIR / 'rq3_memory_impact.png'}")
-print(f"  📊 {OUTPUT_DIR / 'rq1_ablation_study.png'}")
-print(f"  📄 {report_path}")
-print(f"  📄 {json_path}")
+print(f"  {OUTPUT_DIR / 'rq2_validation_effectiveness.png'}")
+print(f"  {OUTPUT_DIR / 'rq3_memory_impact.png'}")
+print(f"  {OUTPUT_DIR / 'rq1_ablation_study.png'}")
+print(f"  {report_path}")
+print(f"  {json_path}")
 print(f"\n{'='*70}\n")
