@@ -1,5 +1,5 @@
 """
-双层校验 - Schema + Runtime
+Two-tier validation - Schema + Runtime.
 """
 import json
 import yaml
@@ -8,14 +8,14 @@ from typing import Dict, List, Tuple
 
 
 class Validator:
-    """计划和运行时验证器"""
+    """Plan and runtime validator."""
 
     def __init__(self, config_dir: Path = None):
-        """初始化验证器"""
+        """Load the skill and safety configuration."""
         if config_dir is None:
             config_dir = Path(__file__).parent / "config"
 
-        # 加载配置
+        # Load configuration
         with open(config_dir / "skills.json") as f:
             self.skills_config = json.load(f)
 
@@ -45,14 +45,14 @@ class Validator:
 
     def validate_plan(self, plan: Dict) -> Tuple[bool, List[str]]:
         """
-        Schema验证 - 检查计划格式和内容
+        Schema validation - check plan format and content.
 
         Returns:
-            (是否有效, 错误列表)
+            (is_valid, list_of_errors)
         """
         errors = []
 
-        # 1. 检查格式
+        # 1. Check format
         if 'plan' not in plan:
             errors.append("Missing 'plan' key")
             return False, errors
@@ -62,9 +62,9 @@ class Validator:
             errors.append("'plan' must be a list")
             return False, errors
 
-        # 2. 检查每个动作
+        # 2. Check each action
         for i, action in enumerate(actions):
-            # 检查必需字段
+            # Check required fields
             if 'name' not in action:
                 errors.append(f"Step {i+1}: missing 'name'")
                 continue
@@ -76,12 +76,12 @@ class Validator:
             skill_name = action['name']
             params = action['params']
 
-            # 检查技能是否存在
+            # Check the skill exists
             if skill_name not in self.valid_skills:
                 errors.append(f"Step {i+1}: invalid skill '{skill_name}'")
                 continue
 
-            # 1) 每个技能声明的必需参数都必须存在（数据来自 skills.json）
+            # 1) Every required parameter declared for the skill must be present (from skills.json)
             missing = [p for p in self.required_params[skill_name]
                        if p not in params]
             if missing:
@@ -91,7 +91,7 @@ class Validator:
                 )
                 continue
 
-            # 2) 按技能类型校验参数的取值是否合法
+            # 2) Check parameter values are legal for the skill type
             if skill_name in self.pose_target_skills:
                 target = params['target']
                 if target not in self.valid_poses:
@@ -113,16 +113,16 @@ class Validator:
                         f"got '{angle}'"
                     )
 
-        # 3. 检查序列约束
+        # 3. Check sequence constraints
         errors.extend(self._check_sequence_constraints(actions))
 
         return len(errors) == 0, errors
 
     def _check_sequence_constraints(self, actions: List[Dict]) -> List[str]:
-        """检查技能序列约束"""
+        """Check skill-sequence constraints."""
         errors = []
 
-        # 检查禁止序列
+        # Check forbidden sequences
         for i in range(len(actions) - 1):
             current = actions[i]['name']
             next_action = actions[i+1]['name']
@@ -133,7 +133,7 @@ class Validator:
                         f"Forbidden sequence: {current} → {next_action}"
                     )
 
-        # 检查必须以HOME结尾（暂时注释，用于测试）
+        # 'Must end at HOME' rule - currently disabled
         # if actions and actions[-1]['params'].get('target') != 'HOME':
         #     errors.append("Plan must end at HOME pose")
 
@@ -141,10 +141,10 @@ class Validator:
 
     def validate_runtime(self, force: float, temperature: float) -> Tuple[bool, str]:
         """
-        Runtime验证 - 检查传感器数据
+        Runtime validation - check sensor data (not wired to any sensor).
 
         Returns:
-            (是否安全, 消息)
+            (is_safe, message)
         """
         limits = self.safety_config['runtime_limits']
 
@@ -157,11 +157,11 @@ class Validator:
         return True, "Runtime checks passed"
 
 
-# 测试
+# Manual smoke test
 def test():
     validator = Validator()
 
-    # 测试有效计划
+    # Valid plan
     valid_plan = {
         "plan": [
             {"step": 1, "name": "moveTo", "params": {"target": "HOME"}},
@@ -176,7 +176,7 @@ def test():
         for error in errors:
             print(f"  - {error}")
 
-    # 测试无效计划
+    # Invalid plan
     invalid_plan = {
         "plan": [
             {"step": 1, "name": "grasp", "params": {"target": "InvalidObject"}},
@@ -189,7 +189,7 @@ def test():
     for error in errors:
         print(f"  - {error}")
 
-    # 测试runtime
+    # Runtime check
     safe, msg = validator.validate_runtime(force=15.0, temperature=30.0)
     print(f"\nRuntime check: {safe} - {msg}")
 

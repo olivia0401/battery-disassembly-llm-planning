@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-可视化状态管理器 - 完全负责场景物体的创建和移动
-在RViz中显示物体被抓取和移动的效果
+Visual state manager - owns creation and movement of scene objects.
+Shows objects being grasped and moved in RViz.
 
-工作原理：
-1. 启动时创建电池和顶盖collision objects
-2. 监听skill反馈
-3. grasp成功 → 从场景移除物体，创建跟随夹爪的attached object
-4. release成功 → 在目标位置重新创建物体
+How it works:
+1. On start-up, create the battery and top-cover collision objects
+2. Listen to skill feedback
+3. grasp succeeded -> remove the object from the world and attach it to the gripper
+4. release succeeded -> the object is re-created where it was released
 """
 import rclpy
 from rclpy.node import Node
@@ -44,7 +44,7 @@ class VisualStateManager(Node):
     def __init__(self):
         super().__init__('visual_state_manager')
 
-        # 订阅skill反馈
+        # Subscribe to skill feedback
         self.feedback_sub = self.create_subscription(
             String,
             '/llm_feedback',
@@ -52,7 +52,7 @@ class VisualStateManager(Node):
             10
         )
 
-        # 订阅LLM命令以跟踪当前操作的目标
+        # Subscribe to LLM commands to track the current target
         self.command_sub = self.create_subscription(
             String,
             '/llm_commands',  # Fixed: subscribe to correct topic (plural)
@@ -60,83 +60,83 @@ class VisualStateManager(Node):
             10
         )
 
-        # 场景服务客户端
+        # Planning-scene service client
         self.scene_client = self.create_client(ApplyPlanningScene, '/apply_planning_scene')
 
-        # 等待服务可用
-        self.get_logger().info('等待 /apply_planning_scene 服务...')
+        # Wait for the service
+        self.get_logger().info('Waiting for /apply_planning_scene service...')
         while not self.scene_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('等待 /apply_planning_scene 服务...')
+            self.get_logger().info('Waiting for /apply_planning_scene service...')
 
-        # TF监听器（用于获取夹爪位姿）
+        # TF listener (for the gripper pose)
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        # 物体尺寸定义
-        # 尺寸按 Robotiq-85 (最大开口约 85mm) 可实际夹持来设计:
-        # 电池包是固定工件(不被抓取), 顶部的小盖块 (5cm) 才是抓取目标。
+        # Object dimensions
+        # Sized so a Robotiq-85 (max opening ~85mm) can actually grip them:
+        # the battery pack is a fixed workpiece (not grasped); the small 5cm cover block on top is the grasp target.
         BATTERY_BASE_X = 0.45
         BATTERY_BASE_Y = 0.0
         BATTERY_BASE_Z = 0.0
-        # 电池包(工件)。宽度必须 <= 夹爪最大开口(~8.5cm)才能被抓起，
-        # 否则手指插进箱体 -> MoveIt 起始状态非法 -> move_group 卡死。
-        # 见 skill_handlers.GRIPPER_MAX_OPENING。
+        # Battery pack (workpiece). Width must be <= the gripper's max opening (~8.5cm) to be graspable,
+        # otherwise the fingers penetrate the box -> invalid MoveIt start state -> move_group hangs.
+        # See skill_handlers.GRIPPER_MAX_OPENING.
         BATTERY_W, BATTERY_D, BATTERY_H = 0.07, 0.07, 0.05
-        COVER_W, COVER_D, COVER_H = 0.05, 0.05, 0.03         # 可抓取的小盖块
+        COVER_W, COVER_D, COVER_H = 0.05, 0.05, 0.03         # graspable cover block
 
         self.object_definitions = {
             'TopCoverBolts': {
-                'dimensions': [COVER_W, COVER_D, COVER_H],  # 小盖块(抓取目标)
+                'dimensions': [COVER_W, COVER_D, COVER_H],  # cover block (grasp target)
                 'initial_pose': {
                     'x': BATTERY_BASE_X,
                     'y': BATTERY_BASE_Y,
-                    'z': BATTERY_BASE_Z + BATTERY_H + COVER_H/2  # 坐在电池顶面上
+                    'z': BATTERY_BASE_Z + BATTERY_H + COVER_H/2  # sits on top of the battery
                 },
                 'place_pose': {
                     'x': 0.3,
                     'y': -0.4,
-                    'z': COVER_H/2  # 托盘位置
+                    'z': COVER_H/2  # tray position
                 }
             },
             'BatteryBox_0': {
-                'dimensions': [BATTERY_W, BATTERY_D, BATTERY_H],  # 电池包(工件)
+                'dimensions': [BATTERY_W, BATTERY_D, BATTERY_H],  # battery pack (workpiece)
                 'initial_pose': {
                     'x': BATTERY_BASE_X,
                     'y': BATTERY_BASE_Y,
-                    'z': BATTERY_BASE_Z + BATTERY_H/2  # 中心点
+                    'z': BATTERY_BASE_Z + BATTERY_H/2  # centre
                 },
                 'place_pose': {
                     'x': 0.3,
                     'y': 0.4,
-                    'z': BATTERY_H/2  # 回收箱位置
+                    'z': BATTERY_H/2  # recycling-bin position
                 }
             }
         }
 
-        # 当前抓取的物体
+        # currently grasped object
         self.grasped_object = None
 
-        # 当前目标对象
+        # current target object
         self.current_target = None
 
-        # 标记原物体是否已移除（用于确保移除只执行一次）
+        # whether the original object was removed (so removal runs only once)
         self.original_removed = False
 
-        # 等待一下让move_group完全启动
-        self.get_logger().info('等待3秒让move_group完全启动...')
+        # Give move_group time to start
+        self.get_logger().info('Waiting 3s for move_group to start...')
         import time
         time.sleep(3)
 
-        # 初始化场景
+        # Initialise the scene
         self.initialize_scene()
 
-        # 定时器：更新attached object位姿（10Hz）- 已禁用，改为仅在grasp时创建一次
+        # 10Hz attached-object pose update timer - disabled; the object is created once on grasp
         # self.update_timer = self.create_timer(0.1, self.update_attached_object)
 
         self.get_logger().info('[OK] Visual State Manager ready!')
 
     def command_callback(self, msg):
-        """处理LLM命令，提取当前操作的目标物体"""
+        """Handle an LLM command and record its target object."""
         try:
             command_json = json.loads(msg.data)
             # Extract target from params.object, params.target, params.object_id, or top-level target
@@ -150,13 +150,13 @@ class VisualStateManager(Node):
 
             if target and target in self.object_definitions:
                 self.current_target = target
-                self.get_logger().info(f"当前目标: {target}")
+                self.get_logger().info(f"Current target: {target}")
         except Exception as e:
             self.get_logger().debug(f"Command parse error: {e}")
 
     def clean_attached_objects(self):
-        """清除所有可能的残留attached objects - 每个对象单独发送REMOVE请求"""
-        # 可能的attached object names (包括所有可能的命名格式)
+        """Remove any leftover attached objects, one REMOVE request per object."""
+        # Possible attached-object names (all naming formats)
         possible_attached = ['TopCoverBolts_attached', 'topcover_attached',
                            'BatteryBox_0_attached', 'BatteryBox_1_attached']
 
@@ -170,23 +170,23 @@ class VisualStateManager(Node):
             obj.operation = CollisionObject.REMOVE
             req.scene.world.collision_objects.append(obj)
 
-            # 同步调用，确保每个删除完成
-            future = self.scene_client.call_async(req)
+            # Async call; the short sleep gives MoveIt time to apply each removal
+            self.scene_client.call_async(req)
             import time
-            time.sleep(0.1)  # 给MoveIt时间处理
+            time.sleep(0.1)  # give MoveIt time to process
 
-        self.get_logger().info('已清除残留attached objects')
+        self.get_logger().info('Cleared leftover attached objects')
 
     def initialize_scene(self):
-        """初始化场景：创建所有collision objects"""
-        # 首先清除所有可能的残留attached objects
+        """Initialise the scene: create all collision objects."""
+        # First remove any leftover attached objects
         self.clean_attached_objects()
 
         req = ApplyPlanningScene.Request()
         req.scene = PlanningScene()
         req.scene.is_diff = True
 
-        # 创建TopCoverBolts
+        # Create TopCoverBolts
         top_cover = self.create_collision_object(
             'TopCoverBolts',
             self.object_definitions['TopCoverBolts']['dimensions'],
@@ -194,7 +194,7 @@ class VisualStateManager(Node):
         )
         req.scene.world.collision_objects.append(top_cover)
 
-        # 创建BatteryBox_0
+        # Create BatteryBox_0
         battery = self.create_collision_object(
             'BatteryBox_0',
             self.object_definitions['BatteryBox_0']['dimensions'],
@@ -202,11 +202,11 @@ class VisualStateManager(Node):
         )
         req.scene.world.collision_objects.append(battery)
 
-        # 添加允许碰撞矩阵 - 允许TopCoverBolts和BatteryBox_0碰撞 + 夹爪内部碰撞
+        # Allowed-collision matrix: TopCoverBolts may touch BatteryBox_0, plus gripper-internal contacts
         from moveit_msgs.msg import AllowedCollisionMatrix, AllowedCollisionEntry
         acm = AllowedCollisionMatrix()
 
-        # 添加场景对象 + 夹爪链接 + 手臂链接到ACM
+        # Add scene objects + gripper links + arm links to the ACM
         gripper_and_arm_links = [
             'robotiq_85_left_inner_knuckle_link',
             'robotiq_85_left_finger_tip_link',
@@ -219,12 +219,12 @@ class VisualStateManager(Node):
             'robotiq_85_base_link',
             'base_link',
             'shoulder_link',
-            'bracelet_link',       # 新增：手臂末端链接
-            'end_effector_link'    # 新增：末端执行器链接
+            'bracelet_link',       # arm end link
+            'end_effector_link'    # end-effector link
         ]
         acm.entry_names = ['BatteryBox_0', 'TopCoverBolts'] + gripper_and_arm_links
 
-        # 创建ACM矩阵 - 允许夹爪/手臂链接之间互相碰撞，允许场景对象和夹爪碰撞
+        # Build the ACM: gripper/arm links may touch each other, and scene objects may touch the gripper
         n = len(acm.entry_names)
         acm.entry_values = []
 
@@ -232,50 +232,50 @@ class VisualStateManager(Node):
             entry = AllowedCollisionEntry()
             enabled = []
             for j in range(n):
-                # 场景对象之间的碰撞规则
+                # Collision rules between scene objects
                 if i < 2 and j < 2:
-                    enabled.append(i != j and (i == 1 or j == 1))  # TopCoverBolts可以和BatteryBox_0碰撞
-                # 夹爪/手臂链接之间全部允许碰撞
+                    enabled.append(i != j and (i == 1 or j == 1))  # TopCoverBolts may touch BatteryBox_0
+                # All gripper/arm link pairs allowed
                 elif i >= 2 and j >= 2:
                     enabled.append(True)
-                # 场景对象和夹爪/手臂之间允许碰撞（抓取时需要）
+                # Scene objects vs gripper/arm allowed (needed for grasping)
                 else:
-                    enabled.append(True)  # 修改：允许场景对象和夹爪碰撞
+                    enabled.append(True)  # allow scene object / gripper contact
             entry.enabled = enabled
             acm.entry_values.append(entry)
 
         req.scene.allowed_collision_matrix = acm
 
-        # 调用服务（带重试）。move_group 刚启动时 /apply_planning_scene 可能
-        # 一忙就在单次 2s 超时内不确认，导致物体没建成、场景是空的（RViz 里
-        # 电池/顶盖块"不见了"）。重试若干次并确认 success，直到真正建成为止。
+        # Call the service with retries. Right after move_group starts, /apply_planning_scene
+        # may not confirm within a single 2s timeout, leaving the scene empty (the battery and
+        # cover block 'disappear' in RViz). Retry and check success until the objects exist.
         import time
         created = False
         for attempt in range(1, 7):
             future = self.scene_client.call_async(req)
             rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
             if future.result() and future.result().success:
-                self.get_logger().info('[OK] 成功创建场景对象: TopCoverBolts, BatteryBox_0')
+                self.get_logger().info('[OK] Created scene objects: TopCoverBolts, BatteryBox_0')
                 created = True
                 break
-            self.get_logger().warn(f'[WARN] 场景对象创建未确认 (尝试 {attempt}/6)，重试...')
+            self.get_logger().warn(f'[WARN] Scene-object creation not confirmed (attempt {attempt}/6), retrying...')
             time.sleep(1.0)
         if not created:
-            self.get_logger().error('[FAIL] 创建场景对象失败（已重试6次）')
+            self.get_logger().error('[FAIL] Could not create scene objects (6 attempts)')
 
     def create_collision_object(self, object_id, dimensions, pose_dict):
-        """创建collision object"""
+        """Create a collision object."""
         collision_obj = CollisionObject()
         collision_obj.header.frame_id = 'world'
         collision_obj.id = object_id
         collision_obj.operation = CollisionObject.ADD
 
-        # 添加形状
+        # Shape
         primitive = SolidPrimitive()
         primitive.type = SolidPrimitive.BOX
         primitive.dimensions = dimensions
 
-        # 设置位姿
+        # Pose
         pose = Pose()
         pose.position.x = pose_dict['x']
         pose.position.y = pose_dict['y']
@@ -288,74 +288,75 @@ class VisualStateManager(Node):
         return collision_obj
 
     def feedback_callback(self, msg):
-        """处理skill反馈"""
+        """Handle skill feedback."""
         try:
             data = msg.data
 
-            # 尝试解析JSON格式的feedback
+            # Try to parse JSON feedback
             try:
                 feedback_json = json.loads(data)
                 message_lower = feedback_json.get('message', '').lower()
 
-                # 检查grasp成功 - 注意消息格式: "Skill ''grasp'' completed"
+                # Detect a successful grasp - message format: "Skill ''grasp'' completed"
                 if (feedback_json.get('status') == 'success' and
                     'grasp' in message_lower and
                     'completed' in message_lower):
 
-                    # 使用current_target（从command_callback中设置）
+                    # Use current_target (set in command_callback)
                     if self.current_target and self.current_target in self.object_definitions:
-                        self.get_logger().info(f"检测到抓取成功: {self.current_target}")
+                        self.get_logger().info(f"Grasp succeeded: {self.current_target}")
                         self.attach_object_visual(self.current_target)
                     else:
-                        self.get_logger().warn(f"[WARN] 抓取成功但没有当前目标或目标未定义: {self.current_target}")
+                        self.get_logger().warn(f"[WARN] Grasp succeeded but no current target or target undefined: {self.current_target}")
 
-                # 检查release成功
+                # Detect a successful release
                 elif (feedback_json.get('status') == 'success' and
                       'release' in message_lower and
                       'completed' in message_lower):
 
                     if self.grasped_object:
-                        self.get_logger().info(f"检测到放置成功: {self.grasped_object}")
+                        self.get_logger().info(f"Release succeeded: {self.grasped_object}")
                         self.detach_object_visual(self.grasped_object)
                     else:
-                        self.get_logger().warn(f"[WARN] 放置成功但没有已抓取物体")
+                        self.get_logger().warn("[WARN] Release succeeded but no object was grasped")
 
             except json.JSONDecodeError:
-                # 旧格式兼容
+                # Legacy message format
                 data_lower = data.lower()
                 if 'grasp' in data_lower and 'completed' in data_lower:
                     if self.current_target and self.current_target in self.object_definitions:
-                        self.get_logger().info(f"检测到抓取成功: {self.current_target}")
+                        self.get_logger().info(f"Grasp succeeded: {self.current_target}")
                         self.attach_object_visual(self.current_target)
 
                 elif 'release' in data_lower and 'completed' in data_lower:
                     if self.grasped_object:
-                        self.get_logger().info(f"检测到放置成功: {self.grasped_object}")
+                        self.get_logger().info(f"Release succeeded: {self.grasped_object}")
                         self.detach_object_visual(self.grasped_object)
 
         except Exception as e:
-            self.get_logger().error(f"Feedback parse error: {e}")  # 改回error以便调试
+            self.get_logger().error(f"Feedback parse error: {e}")
 
     def attach_object_visual(self, object_id):
-        """可视化：物体被抓取（从world中移除，准备跟随夹爪）"""
-        # 标记为已抓取，update_attached_object定时器会创建跟随夹爪的物体
+        """Visualise a grasp (remove from the world, ready to follow the gripper)."""
+        # Mark as grasped; update_attached_object creates the gripper-following copy
         self.grasped_object = object_id
-        self.original_removed = False  # 重置标志
-        self.get_logger().info(f"  [OK] {object_id} 标记为已抓取（将跟随夹爪）")
+        self.original_removed = False  # reset flag
+        self.get_logger().info(f"  [OK] {object_id} marked as grasped (will follow the gripper)")
 
     def detach_object_visual(self, object_id):
-        """放置由 scene_manager.detach_object 处理 (把零件留在夹爪松开处的桌面上)。
-        这里不再在固定点重建物体——那正是之前"零件瞬移到地面"的来源。仅清状态。"""
-        self.get_logger().info(f"  [OK] {object_id} 放置由 scene_manager 处理 (留在夹爪松开处)")
+        """Placement is handled by scene_manager.detach_object (the part stays where the
+        gripper let go). Re-creating the object at a fixed point here was what made parts
+        teleport to the floor, so this only clears state."""
+        self.get_logger().info(f"  [OK] {object_id} placement handled by scene_manager (left where released)")
         self.grasped_object = None
 
     def update_attached_object(self):
-        """定时更新：让抓取的物体跟随夹爪移动"""
+        """Timer update: make the grasped object follow the gripper."""
         if self.grasped_object is None:
             return
 
         try:
-            # 获取夹爪的当前位姿
+            # Current gripper pose
             transform = self.tf_buffer.lookup_transform(
                 'world',
                 'robotiq_85_base_link',
@@ -363,7 +364,7 @@ class VisualStateManager(Node):
                 timeout=rclpy.duration.Duration(seconds=0.05)
             )
 
-            # 在夹爪位置创建/更新物体
+            # Create/update the object at the gripper
             req = ApplyPlanningScene.Request()
             req.scene = PlanningScene()
             req.scene.is_diff = True
@@ -373,16 +374,16 @@ class VisualStateManager(Node):
             collision_obj.id = f"{self.grasped_object}_attached"
             collision_obj.operation = CollisionObject.ADD
 
-            # 添加形状
+            # Shape
             primitive = SolidPrimitive()
             primitive.type = SolidPrimitive.BOX
             primitive.dimensions = self.object_definitions[self.grasped_object]['dimensions']
 
-            # 设置位姿（物体跟随夹爪，偏移根据物体尺寸调整）
+            # Pose (object follows the gripper, offset by object size)
             pose = Pose()
-            # 物体中心在夹爪下方，距离 = 夹爪指尖长度(约8cm) + 物体高度的一半
+            # Object centre sits below the gripper: fingertip length (~8cm) + half the object height
             object_height = self.object_definitions[self.grasped_object]['dimensions'][2]
-            offset_z = -0.08 - object_height / 2.0  # 夹爪下方
+            offset_z = -0.08 - object_height / 2.0  # below the gripper
 
             pose.position.x = transform.transform.translation.x
             pose.position.y = transform.transform.translation.y
@@ -393,20 +394,20 @@ class VisualStateManager(Node):
             collision_obj.primitive_poses.append(pose)
             req.scene.world.collision_objects.append(collision_obj)
 
-            # 第一次运行时，同时移除原物体
+            # On the first run, also remove the original object
             if not self.original_removed:
                 original_obj = CollisionObject()
                 original_obj.id = self.grasped_object
                 original_obj.operation = CollisionObject.REMOVE
                 req.scene.world.collision_objects.append(original_obj)
                 self.original_removed = True
-                self.get_logger().info(f"  移除原物体 {self.grasped_object}，创建跟随版本")
+                self.get_logger().info(f"  Removed original {self.grasped_object}; created following copy")
 
-            # 异步调用（不等待结果，避免阻塞）
+            # Async call (don't wait, to avoid blocking)
             self.scene_client.call_async(req)
 
-        except Exception as e:
-            # TF查询可能失败（正常情况，不打印错误）
+        except Exception:
+            # TF lookups can fail transiently; not logged
             pass
 
 

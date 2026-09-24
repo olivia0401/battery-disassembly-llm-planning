@@ -20,7 +20,7 @@ Usage:
     python3 run_rq5_real_execution.py --commands "Go to the home position"
 """
 from __future__ import annotations
-import sys, os, json, time, subprocess, argparse
+import sys, json, time, subprocess, argparse
 from pathlib import Path
 from datetime import datetime
 
@@ -30,8 +30,8 @@ except Exception:
     pass
 
 BASE = Path(__file__).parent
-DISSERTATION = BASE.parent
-SRC = DISSERTATION / "src" / "llm_agent"
+REPO_ROOT = BASE.parent
+SRC = REPO_ROOT / "src" / "llm_agent"
 RESULTS = BASE / "results_fast"
 RESULTS.mkdir(exist_ok=True)
 
@@ -89,7 +89,7 @@ def restart_stack(timeout_ready_s: int = 25) -> subprocess.Popen:
     print("  [restart] launching fresh stack...")
     log = open("/tmp/rq5_ros2_launch.log", "w")
     proc = subprocess.Popen(LAUNCH_CMD, stdout=log, stderr=subprocess.STDOUT,
-                             cwd=str(DISSERTATION))
+                             cwd=str(REPO_ROOT))
 
     ready = False
     for _ in range(timeout_ready_s):
@@ -272,7 +272,7 @@ def main():
     if defense_rows:
         n_caught = sum(1 for r in defense_rows if not r["success"])  # failure here = caught = good
         ci = wilson_ci(n_caught, len(defense_rows))
-        print(f"\nDEFENSE-IN-DEPTH (should_block commands, unvalidated hallucinated plan sent to real robot):")
+        print("\nDEFENSE-IN-DEPTH (should_block commands, unvalidated hallucinated plan sent to real robot):")
         print(f"  Real execution layer independently caught {n_caught}/{len(defense_rows)} "
               f"({100*ci['p']:.1f}% [{100*ci['lo']:.1f}, {100*ci['hi']:.1f}]) "
               f"-- 'caught' means the plan FAILED to execute (good: dispatch-level check worked).")

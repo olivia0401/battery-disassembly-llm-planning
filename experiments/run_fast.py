@@ -29,7 +29,7 @@ Usage
     python run_fast.py --rq all --leakfree --trials 10
 """
 from __future__ import annotations
-import sys, os, json, re, time, asyncio, argparse
+import sys, json, re, time, asyncio, argparse
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any, Optional

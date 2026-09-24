@@ -3,7 +3,7 @@
 This project had zero automated tests before this file (audited across both
 src/battery_dismantle_task and src/llm_agent). metrics.py and stats.py are
 the easiest, highest-value place to start: pure functions, the exact code
-that produces every number in the dissertation's results tables.
+that produces every reported result number.
 
 Run:  python -m pytest experiments/eval/test_metrics.py -v
 """
@@ -98,8 +98,8 @@ def test_classify_failure_exact_match_is_none():
 
 def test_classify_failure_correct_refusal_is_none():
     """An out-of-domain command with an empty prediction (= refused) must NOT
-    be scored as a failure — this was bug #1 fixed per REVISION_MEMO.md
-    section 3.4 ('correct rejections mis-scored as no_plan')."""
+    be scored as a failure (regression test for the 'correct rejections
+    mis-scored as no_plan' bug; see CHANGELOG.md)."""
     fail = classify_failure([], [], VALID_SKILLS, VALID_POSES, VALID_OBJECTS,
                             command_is_out_of_domain=True)
     assert fail is None

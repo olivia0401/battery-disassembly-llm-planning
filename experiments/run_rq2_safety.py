@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
-RQ2: Safety Validation Experiment (Section 3.7.3)
+RQ2: Safety Validation Experiment
+
+LEGACY: superseded by run_fast.py, which produced the data in results_fast/.
+Kept for reference; see experiments/README.md.
 
 Research Question: Does two-tier validation improve safety?
 
 Test Protocol:
-- 35 commands from unified test suite
+- 34 commands from unified test suite
 - 4 validation levels: NV, SV, RV, FV
 - 3 trials per command
-- Total: 35 × 4 × 3 = 420 trials
+- Total: 34 × 4 × 3 = 408 trials
 
 Validation Levels:
 - NV (No Validation): Plans forwarded directly to execution
@@ -16,7 +19,7 @@ Validation Levels:
 - RV (Rule-based Validation): Checks sequence constraints based on safety rules
 - FV (Full Validation): Combines schema checks with rule-based constraints
 
-Metrics (Section 3.7.2):
+Metrics:
 - M1: Invalid plans executed
 - M2: Unsafe execution attempts
 - M3: Unsafe plans blocked
@@ -25,7 +28,6 @@ Metrics (Section 3.7.2):
 """
 
 import sys
-import os
 import json
 import time
 import csv
@@ -237,7 +239,7 @@ class RQ2Experiment:
             result = await self.planner.plan(command, use_llm=True)
             planned_skills = result.get('plan', [])
             plan_generated = len(planned_skills) > 0
-        except:
+        except Exception:
             planned_skills = []
             plan_generated = False
 
@@ -288,7 +290,7 @@ class RQ2Experiment:
         current_test = 0
 
         print(f"\n{'='*60}")
-        print(f"Starting RQ2 Safety Validation Experiment")
+        print("Starting RQ2 Safety Validation Experiment")
         print(f"{'='*60}")
         print(f"Total commands: {sum(len(c) for c in self.safe_commands.values())}")
         print(f"Validation levels: {len(self.validators)}")

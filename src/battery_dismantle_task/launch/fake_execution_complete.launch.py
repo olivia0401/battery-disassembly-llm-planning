@@ -1,27 +1,24 @@
 #!/usr/bin/env python3
 """
-Complete working launch file for fake execution with INTERACTIVE CONTROL support.
-This combines all necessary components in one file including ros2_control.
+Full fake-execution launch: MoveIt planning plus ros2_control fake controllers.
 
-Key components:
+Components:
 1. Robot State Publisher
-2. ROS2 Control Node (controller_manager) - NEW!
-3. Joint State Broadcaster - NEW!
+2. ROS 2 Control node (controller_manager)
+3. Joint State Broadcaster + manipulator/gripper controllers
 4. MoveIt move_group
-5. RViz2
-6. Interactive Joint Control Node - NEW!
+5. RViz2 (optional, use_rviz)
+6. Visual State Manager
 7. Skill Server
-8. Visual State Manager
 """
 
 import os
 import yaml
 from pathlib import Path
-import launch
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, TimerAction, ExecuteProcess
 from launch.conditions import IfCondition
-from launch.substitutions import Command, LaunchConfiguration
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import xacro
@@ -47,7 +44,6 @@ def generate_launch_description():
 
     # --- Get Package Paths Using ament_index ---
     battery_dismantle_pkg_share = Path(get_package_share_directory("battery_dismantle_task"))
-    kortex_description_pkg_share = Path(get_package_share_directory("kortex_description"))
 
     # --- File Paths ---
     # Use our custom xacro that includes fixed gripper macro
@@ -193,22 +189,6 @@ def generate_launch_description():
         ]
     )
 
-    # 9. Interactive Joint Control Node - wait 5.0s for all controllers to be active
-    # THIS IS THE KEY NODE FOR INTERACTIVE CONTROL IN RVIZ!
-    # It listens to RViz interactive markers and sends commands to ros2_control
-    interactive_control_node = TimerAction(
-        period=5.0,
-        actions=[
-            Node(
-                package="battery_dismantle_task",
-                executable="interactive_joint_control_node",
-                name="interactive_joint_control",
-                output="screen",
-                parameters=[{"use_sim_time": False}]
-            )
-        ]
-    )
-
     # 10. Skill Server - wait 10.0s for everything to be ready
     waypoints_file = str(battery_dismantle_pkg_share / "config" / "waypoints.json")
     skill_server_params = {
@@ -249,16 +229,16 @@ def generate_launch_description():
         use_rviz_arg,
         # Core nodes (start immediately)
         robot_state_publisher_node,
-        controller_manager_node,  # NEW!
+        controller_manager_node,
         move_group_node,
         rviz_node,
 
         # Timed actions (start with delays)
-        spawn_joint_state_broadcaster,  # NEW! (1.5s)
-        spawn_manipulator_controller,    # NEW! (2.5s)
-        spawn_gripper_controller,        # NEW! (3.0s)
+        spawn_joint_state_broadcaster,  # (1.5s)
+        spawn_manipulator_controller,    # (2.5s)
+        spawn_gripper_controller,        # (3.0s)
         visual_state_manager_node,       # (4.0s)
-        # interactive_control_node removed: it drives ros2_control from RViz
+        # interactive_joint_control_node is deliberately not launched: it drives ros2_control from RViz
         # interactive markers (a second command path that fights skill_server)
         # and adds the floating marker/ghost. Not needed for LLM-driven demo.
         skill_server_node,               # (10.0s)

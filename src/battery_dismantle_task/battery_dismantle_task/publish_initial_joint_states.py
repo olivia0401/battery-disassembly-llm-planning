@@ -7,7 +7,6 @@ This gives MoveIt an initial state to start from.
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from builtin_interfaces.msg import Time
 
 
 class InitialJointStatePublisher(Node):

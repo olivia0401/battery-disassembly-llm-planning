@@ -15,7 +15,6 @@ import json
 import time
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-import threading
 
 # Global executor for running async tasks
 executor_pool = ThreadPoolExecutor(max_workers=4)
@@ -133,18 +132,18 @@ class RobotUI:
             elif self.planner.rag and self.planner.rag.enabled:
                 log.append("  ├─ No similar cases found in knowledge base")
 
-            log.append(f"  ├─ LLM responded successfully")
+            log.append("  ├─ LLM responded successfully")
             log.append(f"  └─ Generated {num_steps}-step plan")
-            log.append(f"[OK] Planning completed\n")
+            log.append("[OK] Planning completed\n")
 
         except Exception as e:
             import traceback
             error_trace = traceback.format_exc()
-            log.append(f"  └─ [FAIL] LLM request failed")
+            log.append("  └─ [FAIL] LLM request failed")
             log.append(f"[FAIL] Planning failed: {str(e)}")
             print(f"Planning error:\n{error_trace}")
             result = "\n".join(log), "", json.dumps({"error": str(e)}, indent=2)
-            print(f"Returning error result")
+            print("Returning error result")
             return result
 
         # Step 2: Validation
@@ -169,7 +168,7 @@ class RobotUI:
                 log.append(f"  • {error}")
             log.append("")
             result = "\n".join(log), "", json.dumps(plan, indent=2)
-            print(f"Validation failed, returning")
+            print("Validation failed, returning")
             return result
 
         log.append("  └─ [OK] All checks passed!")
@@ -220,11 +219,11 @@ class RobotUI:
         except Exception as e:
             import traceback
             error_trace = traceback.format_exc()
-            log.append(f"  └─ [FAIL] Robot communication error")
+            log.append("  └─ [FAIL] Robot communication error")
             log.append(f"\n[FAIL] Execution error: {str(e)}")
             print(f"Execution error:\n{error_trace}")
             result = "\n".join(log), plan_text, json.dumps(plan, indent=2)
-            print(f"Returning execution error")
+            print("Returning execution error")
             return result
 
         final_result = ("\n".join(log), plan_text, json.dumps(results, indent=2))

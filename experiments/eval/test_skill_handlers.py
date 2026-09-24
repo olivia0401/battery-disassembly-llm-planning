@@ -109,7 +109,7 @@ def test_rotated_joints_does_not_mutate_input():
 def test_rotated_joints_clamped_to_soft_limit():
     """A bad/extreme angle from a hallucinating LLM must not command an
     unbounded wrist rotation — this is the safety guard added alongside the
-    5 missing skill handlers (see REVISION_MEMO.md)."""
+    5 missing skill handlers (see CHANGELOG.md)."""
     sh = make_handlers()
     out = sh.rotated_joints(HOME_JOINTS, 100000)  # absurd angle
     assert out[WRIST_JOINT_INDEX] <= WRIST_JOINT_SOFT_LIMIT_RAD

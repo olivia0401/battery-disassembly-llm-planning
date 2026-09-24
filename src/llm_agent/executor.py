@@ -3,12 +3,11 @@ Executor - ROS2 or Mock
 Provides fine-grained control and state query capabilities
 """
 import rclpy
-from rclpy.node import Node
 from std_msgs.msg import String
 from sensor_msgs.msg import JointState
 import json
 import time
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 
 class Executor:
@@ -79,14 +78,14 @@ class Executor:
 
     def execute(self, plan: Dict, timeout: float = 120.0) -> Dict:
         """
-        执行计划
+        Execute a plan.
 
         Args:
-            plan: 计划字典
-            timeout: 每个动作的超时时间(秒)
+            plan: plan dict
+            timeout: per-action timeout (seconds)
 
         Returns:
-            执行结果 {"success": bool, "executed": int, "failed": int, "log": [...]}
+            execution result {"success": bool, "executed": int, "failed": int, "log": [...]}
         """
         actions = plan['plan']
         results = {
@@ -112,7 +111,7 @@ class Executor:
             else:
                 success = self._execute_mock(action)
 
-            # 记录结果
+            # Record the result
             log_entry = {
                 "step": i,
                 "action": action,
@@ -123,17 +122,17 @@ class Executor:
 
             if success:
                 results['executed'] += 1
-                print(f"   [OK] Success")
+                print("   [OK] Success")
             else:
                 results['failed'] += 1
                 results['success'] = False
-                print(f"   [FAIL] Failed")
-                # 是否继续?
+                print("   [FAIL] Failed")
+                # Continue?
                 break
 
-            time.sleep(0.5)  # 短暂延迟
+            time.sleep(0.5)  # short delay
 
-        print(f"\nExecution Summary:")
+        print("\nExecution Summary:")
         print(f"   Total: {len(actions)}")
         print(f"   Executed: {results['executed']}")
         print(f"   Failed: {results['failed']}")
@@ -141,24 +140,24 @@ class Executor:
         return results
 
     def _execute_ros(self, action: Dict, timeout: float) -> bool:
-        """通过ROS2执行"""
-        # 构造命令 - 必须包含schema字段
+        """Execute via ROS 2."""
+        # Build the command - the schema field is required
         command = {
             "schema": "llm_cmd/v1",
             "skill": action['name']
         }
 
-        # 添加target参数（如果存在）
+        # Add the target parameter if present
         if 'target' in action['params']:
             command['target'] = action['params']['target']
 
-        # 发布命令
+        # Publish the command
         msg = String()
         msg.data = json.dumps(command)
         self.command_pub.publish(msg)
         print(f"   Published command: {msg.data}")
 
-        # 等待反馈
+        # Wait for feedback
         self.last_feedback = None
         start_time = time.time()
 
@@ -169,12 +168,12 @@ class Executor:
                 print(f"   ⏱  Timeout after {timeout}s")
                 return False
 
-        # 解析JSON反馈: {"status": "success", "message": "...", "timestamp": ...}
+        # Parse JSON feedback: {"status": "success", "message": "...", "timestamp": ...}
         try:
             feedback = json.loads(self.last_feedback)
             return feedback.get("status") == "success"
         except (json.JSONDecodeError, KeyError):
-            # 兼容简单字符串反馈
+            # Also accept plain-string feedback
             return self.last_feedback == "success"
 
     def _execute_mock(self, action: Dict) -> bool:
@@ -187,16 +186,16 @@ class Executor:
         action_str = f"{skill_name}_{target}"
         action_hash = hash(action_str) % 100
 
-        # Skill-specific failure rates (降低以获得合理成功率)
+        # Skill-specific failure rates (mock mode only)
         failure_thresholds = {
-            'moveTo': 1,           # 1% failure (降低)
-            'grasp': 1,            # 1% failure (降低)
-            'release': 0,          # 0% failure (基础操作不应失败)
-            'unscrew': 2,          # 2% failure (降低)
-            'disconnect': 1,       # 1% failure (降低)
+            'moveTo': 1,           # 1% failure
+            'grasp': 1,            # 1% failure
+            'release': 0,          # 0% failure (basic operation)
+            'unscrew': 2,          # 2% failure
+            'disconnect': 1,       # 1% failure
             'inspect': 0,          # 0% failure
-            'openGripper': 0,      # 0% failure (基础操作不应失败)
-            'closeGripper': 0,     # 0% failure (基础操作不应失败)
+            'openGripper': 0,      # 0% failure (basic operation)
+            'closeGripper': 0,     # 0% failure (basic operation)
             'waitForStabilization': 0,  # Never fails
             'rotateGripper': 1     # 1% failure
         }
@@ -214,7 +213,7 @@ class Executor:
             print(f"   [FAIL] Mock execution FAILED: {reason}")
             return False
 
-        print(f"   [OK] Mock execution")
+        print("   [OK] Mock execution")
         return True
 
     def get_current_state(self) -> Optional[Dict]:
@@ -262,7 +261,7 @@ class Executor:
 
         print("\nCurrent Robot State:")
         print(f"   Gripper: {state['gripper_state']}")
-        print(f"   Arm Joints:")
+        print("   Arm Joints:")
         for joint, pos in state['arm_joints'].items():
             print(f"      {joint}: {pos:.4f} rad")
         print(f"   Timestamp: {state['timestamp']:.2f}\n")
@@ -275,9 +274,9 @@ class Executor:
             # rclpy.shutdown()
 
 
-# 测试
+# Manual smoke test
 def test():
-    # Mock测试
+    # Mock-mode test
     executor = Executor(use_ros=False)
 
     plan = {

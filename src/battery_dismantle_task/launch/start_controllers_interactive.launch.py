@@ -4,8 +4,6 @@ Secondary launch file to start controllers and interactive node.
 This should be launched *after* the main run_dismantle_task.launch.py is fully started.
 """
 
-import os
-import yaml
 from pathlib import Path
 from launch import LaunchDescription
 from launch.actions import TimerAction, ExecuteProcess
@@ -90,5 +88,3 @@ def generate_launch_description():
         interactive_control_node,
     ])
 
-# Helper to get Command since we are in a different file
-from launch.substitutions import Command

@@ -1,5 +1,5 @@
 """
-LLM客户端 - 支持多种后端
+LLM client supporting several backends.
 """
 import os
 import asyncio
@@ -15,7 +15,7 @@ MAX_RETRIES = 5
 BASE_BACKOFF_S = 1.0
 MAX_BACKOFF_S = 30.0
 
-# 自动加载.env文件
+# Load .env automatically
 def load_env():
     env_path = Path(__file__).parent / '.env'
     if env_path.exists():
@@ -30,18 +30,18 @@ load_env()
 
 
 class LLMClient:
-    """统一的LLM客户端接口"""
+    """Unified LLM client interface."""
 
     def __init__(self, backend: str = "chutes", api_key: Optional[str] = None):
         """
-        初始化LLM客户端
+        Initialise the LLM client.
 
         Args:
             backend: "chutes", "ollama", "openai"
-            api_key: API密钥(如果需要)
+            api_key: API key (if required)
         """
         self.backend = backend
-        # 根据backend选择对应的环境变量
+        # Pick the environment variable for this backend
         if backend == "openrouter":
             self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         elif backend == "openai":
@@ -49,7 +49,7 @@ class LLMClient:
         else:
             self.api_key = api_key or os.getenv("CHUTES_API_TOKEN")
 
-        # 后端配置
+        # Backend configuration
         self.backends = {
             "chutes": {
                 "url": "https://llm.chutes.ai/v1/chat/completions",
@@ -86,21 +86,21 @@ class LLMClient:
 
         self.config = self.backends[backend]
 
-        # 检查API key
+        # Check the API key
         if self.config["requires_key"] and not self.api_key:
             print(f"[WARN] Warning: {backend} requires API key but none provided")
 
     async def generate(self, prompt: str, temperature: float = 0.3,
                        max_tokens: int = 256) -> str:
         """
-        调用LLM生成文本
+        Generate text with the LLM.
 
         Args:
-            prompt: 输入prompt
-            temperature: 采样温度
+            prompt: input prompt
+            temperature: sampling temperature
 
         Returns:
-            生成的文本
+            The generated text.
         """
         if self.backend == "ollama":
             return await self._call_ollama(prompt, temperature, max_tokens)
@@ -109,7 +109,7 @@ class LLMClient:
 
     async def _call_openai_compatible(self, prompt: str, temperature: float,
                                       max_tokens: int = 512) -> str:
-        """调用OpenAI兼容的API (Chutes, OpenAI, OpenRouter).
+        """Call an OpenAI-compatible API (Chutes, OpenAI, OpenRouter).
 
         Retries on 429/5xx with exponential backoff + jitter (honoring a
         Retry-After header when the provider sends one). Before this, any
@@ -166,7 +166,7 @@ class LLMClient:
 
     async def _call_ollama(self, prompt: str, temperature: float,
                            max_tokens: int = 512) -> str:
-        """调用本地Ollama"""
+        """Call a local Ollama server."""
         data = {
             "model": self.config["model"],
             "prompt": prompt,
@@ -200,7 +200,7 @@ class LLMClient:
                 return result["response"]
 
 
-# 测试
+# Manual smoke test
 async def test():
     client = LLMClient(backend="chutes")
     response = await client.generate("Say hello in 3 words")

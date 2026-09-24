@@ -43,7 +43,7 @@ design, not a failed call. `analyze.py` drops `fallback_demo`/`error` rows and
 reports the per-config drop rate so an uneven dropout can't quietly bias a
 comparison.
 
-## Known blockers / TODO
+## Known limitations
 
 - **Known systematic gap in the `Exact` metric.** Human-Auto kappa is **0.690**
   (agreement 23/27 = 85.2%, rated 2026-07-23) — substantial agreement, so the

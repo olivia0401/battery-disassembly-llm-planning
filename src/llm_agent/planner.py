@@ -268,6 +268,7 @@ class Planner:
         if any(kw in task_lower for kw in release_keywords) and "bolt" in task_lower:
             return {"plan": [{"step": 1, "name": "release", "params": {"target": "TopCoverBolts"}}]}
 
+        # Chinese keywords are intentional: they match Chinese-language commands.
         disassemble_keywords = ["disassemble", "dismantle", "拆解", "拆卸", "complete", "full"]
         if any(kw in task_lower for kw in disassemble_keywords):
             return {

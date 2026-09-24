@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-RQ1: Ablation Study (Section 3.7.6)
+RQ1: Ablation Study
+
+LEGACY: superseded by run_fast.py, which produced the data in results_fast/.
+Kept for reference; see experiments/README.md.
 
 Research Question: What is the contribution of each system component?
 
@@ -17,7 +20,7 @@ Planning Configurations:
 4. LLM+RAG (LR): LLM with RAG retrieval but without validation
 5. Full System (FS): Complete system (LLM + RAG + Validation)
 
-Metrics (Section 3.7.2):
+Metrics:
 - Plan validity rate
 - Execution success rate
 - Generalization performance on paraphrased/varied commands
@@ -31,7 +34,6 @@ This design enables measurement of:
 """
 
 import sys
-import os
 import json
 import time
 import csv
@@ -46,7 +48,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'src' / 'llm_agent'))
 
 from planner import Planner
 from validator import Validator
-from executor import Executor
 
 
 @dataclass
@@ -184,7 +185,7 @@ class FullRAGPlanner:
     """
     Full System: LLM + RAG + Validation.
 
-    This is the complete system as described in the dissertation.
+    This is the complete system (LLM + RAG + validation).
     """
 
     def __init__(self, config_dir: Path, rag_limit: Optional[int] = None):
@@ -456,7 +457,7 @@ class RQ2Experiment:
         current_test = 0
 
         print(f"\n{'='*60}")
-        print(f"Starting RQ1 Ablation Study")
+        print("Starting RQ1 Ablation Study")
         print(f"{'='*60}")
         print(f"Total tests: {total_tests}")
         print(f"Configurations: {len(self.configs)}")
@@ -542,7 +543,7 @@ def main():
     parser.add_argument('--commands', default='test_commands_minimal.json',
                         help='Test commands file (default: test_commands_minimal.json - 20 commands)')
     parser.add_argument('--trials', type=int, default=3,
-                        help='Number of trials per command (default: 3 per Section 3.7.6)')
+                        help='Number of trials per command (default: 3)')
     parser.add_argument('--configs', type=str, nargs='+', default=None,
                         help='Specific configurations to run: SB LO LV LR FS (default: all)')
     parser.add_argument('--resume', type=str, default=None,

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-RQ3: Memory Size Experiment (Section 3.7.4)
+RQ3: Memory Size Experiment
+
+LEGACY: superseded by run_fast.py, which produced the data in results_fast/.
+Kept for reference; see experiments/README.md.
 
 Research Question: What is the effect of retrieval memory size?
 
@@ -10,18 +13,17 @@ Test Protocol:
 - 3 trials per command
 - Total: 20 × 4 × 3 = 240 trials
 
-Metrics (Section 3.7.2):
+Metrics:
 - Plan validity rate as function of k
 - Execution success rate for seen vs. unseen tasks
 - Generalization performance (primitive/bolt_removal/short_disassembly)
 
-Seen vs. Unseen Definition (Section 3.7.4):
+Seen vs. Unseen Definition:
 - Seen: command intent matches at least one episode in retrieval memory
 - Unseen: novel paraphrases/variants with no corresponding episode
 """
 
 import sys
-import os
 import json
 import time
 import csv
@@ -179,7 +181,7 @@ class RQ3Experiment:
             try:
                 if rag_engine.collection.count() == 0:
                     return False, 0.0
-            except:
+            except Exception:
                 return False, 0.0
 
             # Retrieve top similar cases
@@ -237,8 +239,7 @@ class RQ3Experiment:
 
         start_time = time.time()
         try:
-            # Plan task (with timing for retrieval)
-            retrieval_start = time.time()
+            # Plan task
             result = await planner.plan(command, use_llm=True)
             planning_time = time.time() - start_time
 
@@ -266,16 +267,13 @@ class RQ3Experiment:
                 if not plan_valid:
                     error_type = "VALIDATION_FAILED"
 
-            # Real execution
-            execution_time = 0.0
+            # Mock execution
             if plan_valid and len(planned_skills) > 0:
                 try:
                     from executor import Executor
 
                     executor = Executor(use_ros=False)  # Use Mock mode for speed
-                    exec_start = time.time()
                     execution_result = executor.execute({'plan': planned_skills})
-                    execution_time = time.time() - exec_start
                     success = execution_result.get('success', False)
 
                     if not success:
@@ -291,6 +289,7 @@ class RQ3Experiment:
                 success = False
 
         except Exception as e:
+            print(f"   Planning error: {e}")
             planning_time = time.time() - start_time
             retrieval_time = 0.0
             num_cases_retrieved = 0
@@ -324,7 +323,7 @@ class RQ3Experiment:
         current_test = 0
 
         print(f"\n{'='*60}")
-        print(f"Starting RQ3 Memory Size Experiment")
+        print("Starting RQ3 Memory Size Experiment")
         print(f"{'='*60}")
         print(f"Memory sizes: {self.memory_sizes}")
         print(f"Total tests: {total_tests}")
@@ -405,9 +404,9 @@ async def main_async():
     parser.add_argument('--commands', default='test_commands_minimal.json',
                         help='Test commands file (default: test_commands_minimal.json - 20 commands)')
     parser.add_argument('--memory-sizes', type=int, nargs='+', default=[0, 10, 20, 35],
-                        help='Memory sizes to test (default: 0 10 20 35 per Section 3.7.4)')
+                        help='Memory sizes to test (default: 0 10 20 35)')
     parser.add_argument('--trials', type=int, default=3,
-                        help='Number of trials per command (default: 3 per Section 3.7.4)')
+                        help='Number of trials per command (default: 3)')
     parser.add_argument('--resume', type=str, default=None,
                         help='Resume from previous results file (CSV path)')
     args = parser.parse_args()

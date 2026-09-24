@@ -20,8 +20,6 @@ from .motion_config import (
     DEFAULT_ACCELERATION_SCALE,
     JOINT_POSITION_TOLERANCE,
     VISUALIZATION_SLOW_FACTOR,
-    PLANNING_TIMEOUT,
-    EXECUTION_TIMEOUT,
     PLANNING_ATTEMPTS,
     PLANNING_TIME
 )
@@ -384,7 +382,7 @@ class MotionExecutor:
     def _execute_trajectory(self, result):
         """Execute planned trajectory on controller"""
         if result.error_code.val == 1:  # SUCCESS
-            self.node.get_logger().info(f"[OK] Planning successful! Executing trajectory on controller...")
+            self.node.get_logger().info("[OK] Planning successful! Executing trajectory on controller...")
 
             trajectory = result.planned_trajectory.joint_trajectory
             execute_goal = FollowJointTrajectory.Goal()
@@ -418,7 +416,7 @@ class MotionExecutor:
 
             while not exec_result_future.done():
                 if time.time() - exec_start > timeout:
-                    self.node.get_logger().error(f"Timeout waiting for execution to complete!")
+                    self.node.get_logger().error("Timeout waiting for execution to complete!")
                     return False
                 time.sleep(0.01)
 
@@ -528,7 +526,7 @@ class MotionExecutor:
 
         while not result_future.done():
             if time.time() - exec_start > timeout:
-                self.node.get_logger().error(f"[FAIL] Timeout waiting for direct execution to complete!")
+                self.node.get_logger().error("[FAIL] Timeout waiting for direct execution to complete!")
                 return False
             time.sleep(0.01)
 

@@ -4,11 +4,11 @@ RQ4 — Grasp-success sensitivity to perception (pose-estimation) noise.
 
 WHY THIS EXISTS
 ----------------
-The supervisor's feedback was: the system has no perception pipeline — object
-poses are hardcoded (see object_definitions.py / waypoints.json
-"cartesian_hints" in the battery_dismantle_task ROS2 package), so the
-dissertation cannot say anything about how the pipeline would behave with a
-real camera, which always has pose-estimation error.
+The system has no perception pipeline — object poses are hardcoded (see
+object_definitions.py / waypoints.json "cartesian_hints" in the
+battery_dismantle_task ROS2 package), so on its own the project cannot say
+anything about how the pipeline would behave with a real camera, which always
+has pose-estimation error.
 
 We do NOT have a camera or a physics engine in this loop, so this is NOT a
 claim of "we built perception." It is an honest, clearly-labelled GEOMETRIC
@@ -18,8 +18,8 @@ real RGBD/pose-estimation pipeline's error), and ask "at what noise level
 does a grasp attempt at the perceived (not true) position stop landing
 within the gripper's tolerance band?" That is a legitimate, reproducible
 robustness sweep — the same flavour as RQ1-RQ3's controlled ablations — and
-it gives the dissertation a real "robustness under varying conditions"
-result instead of zero perception discussion.
+it gives a real "robustness under varying conditions" result instead of
+zero perception discussion.
 
 GROUND-TRUTH NUMBERS — where they come from (not invented)
 ------------------------------------------------------------

@@ -13,7 +13,7 @@ import time
 import threading
 
 from moveit_msgs.action import MoveGroup
-from moveit_msgs.msg import DisplayTrajectory, PlanningScene, AllowedCollisionMatrix, AllowedCollisionEntry, PlanningSceneComponents
+from moveit_msgs.msg import DisplayTrajectory, PlanningScene, AllowedCollisionEntry, PlanningSceneComponents
 from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene, GetPositionIK, GetPositionFK
 from control_msgs.action import FollowJointTrajectory
 
@@ -92,7 +92,7 @@ class SkillServer(Node):
         # moveTo HOME round-trip (planned, executed, success feedback).
         self._setup_collision_matrix()
 
-        self.get_logger().info(f"[OK] Skill Server Ready! Listening on /llm_commands")
+        self.get_logger().info("[OK] Skill Server Ready! Listening on /llm_commands")
 
     def _init_action_clients(self):
         """Initialize action clients"""
@@ -342,7 +342,6 @@ class SkillServer(Node):
                 return
 
             final_point = traj.points[-1]
-            target_positions = list(final_point.positions[:7])
             duration = final_point.time_from_start.sec + final_point.time_from_start.nanosec / 1e9
 
             self.get_logger().info(f"RViz planning detected! Duration: {duration:.2f}s")
@@ -457,7 +456,7 @@ class SkillServer(Node):
             # already declaring but this dispatcher had no handler for —
             # any plan using these used to be REJECTED here as "Unknown
             # skill" even though the LLM/evaluation pipeline treated them
-            # as valid. See REVISION_MEMO.md for the audit that found this.
+            # as valid. See CHANGELOG.md.
             elif skill == "inspect":
                 return self._handle_inspect(cmd, command_id)
             elif skill == "waitForStabilization":

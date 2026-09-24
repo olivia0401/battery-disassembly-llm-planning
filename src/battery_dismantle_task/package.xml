@@ -6,17 +6,17 @@
   <maintainer email="olivia@example.com">Olivia</maintainer>
   <license>Apache-2.0</license>
 
-  <!-- 构建工具 -->
+  <!-- Build tool -->
   <buildtool_depend>ament_python</buildtool_depend>
 
-  <!-- MoveIt 和机器人 -->
+  <!-- MoveIt and robot -->
   <depend>moveit_fake_controller_manager</depend>
   <depend>kortex_description</depend>
 
-  <!-- 可视化 -->
+  <!-- Visualisation -->
   <depend>rviz2</depend>
 
-  <!-- Python 依赖（运行时） -->
+  <!-- Python runtime dependencies -->
   <exec_depend>python3-yaml</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <depend>moveit_py</depend>

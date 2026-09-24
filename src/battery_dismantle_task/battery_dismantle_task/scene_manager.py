@@ -98,7 +98,7 @@ class SceneManager:
             self.node.get_logger().info(f"Attaching '{object_name}' to '{link_name}'...")
 
             if not self._planning_scene_client.wait_for_service(timeout_sec=5.0):
-                self.node.get_logger().warn(f"[WARN] Planning scene service not available")
+                self.node.get_logger().warn("[WARN] Planning scene service not available")
                 return False
 
             # Create an AttachedCollisionObject message
@@ -196,7 +196,7 @@ class SceneManager:
             self.node.get_logger().info(f"Releasing '{object_name}' where the gripper let go...")
 
             if not self._planning_scene_client.wait_for_service(timeout_sec=5.0):
-                self.node.get_logger().warn(f"[WARN] Planning scene service not available")
+                self.node.get_logger().warn("[WARN] Planning scene service not available")
                 return False
 
             # Use the real attached dims (set by attach_object) so the

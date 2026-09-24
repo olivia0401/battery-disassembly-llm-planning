@@ -420,8 +420,8 @@ class SkillHandlers:
     def execute_unscrew(self, object_name, turns=2, degrees_per_turn=-90):
         """Simplified unscrew: approach, grip, rotate the wrist N times, release, retreat.
 
-        HONESTY NOTE: there is no torque/force sensing on this rig (see
-        REVISION_MEMO.md — tier-2 runtime validation was designed but never
+        HONESTY NOTE: there is no torque/force sensing on this rig (tier-2
+        runtime validation was designed but never
         wired up), so this cannot detect "bolt loosened" vs "gripper just
         spun in place." It is a scripted motion sequence, not a verified
         bolt-removal action. Treat results from this skill as "the arm
