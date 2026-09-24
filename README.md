@@ -21,7 +21,7 @@ LLM robotics demos often look successful when they only check JSON validity or r
 
 ## What this is
 
-- A **Gradio web UI** → **LLM planner** (GPT-4o-mini via OpenAI, or Llama-3.2 via OpenRouter/Ollama) → **skill dispatcher** → **ROS 2 / MoveIt 2** pipeline that plans and executes battery-disassembly tasks on a 9-DOF Kinova Gen3 + Robotiq-85 gripper.
+- A **Gradio web UI** → **LLM planner** (GPT-4o-mini via OpenAI, or Llama-3.2 via OpenRouter/Ollama) → **skill dispatcher** → **ROS 2 / MoveIt 2** pipeline that plans and executes battery-disassembly tasks on a 7-DOF Kinova Gen3 arm with a Robotiq-85 gripper.
 - An **evaluation framework** (`experiments/`) spanning 5 research questions: component ablation, safety-validation effectiveness, RAG memory sensitivity, perception-noise robustness, and — the one that actually closes the loop — sending generated plans into the live ROS 2/MoveIt stack instead of only scoring them as text.
 
 ## Key results
@@ -29,14 +29,15 @@ LLM robotics demos often look successful when they only check JSON validity or r
 | Finding | Detail |
 |---|---|
 | **RAG measurably improves planning accuracy** | Exact-match plan correctness rises from 44.1% (LLM only) to 52.9% (LLM+RAG), paired-significance p<0.001 — with a corrected ground truth (see below) this holds up, it isn't just noise. |
-| **Text-level validation catches almost no unsafe requests — 2.5%** | Validator recall against the per-command safety labels is 2.5% ([0.7%, 8.7%]): 2 of 80 commands that should have been refused. A real-execution probe that sent unvalidated hallucinated plans straight to the live ROS 2 skill server caught 3 of 9 ([12.1%, 64.6%]), so dispatch-level structural checks catch proportionally more than the text-level validator does. Both agree the two-tier check reliably catches format/vocabulary errors but misses semantically-wrong-but-structurally-valid actions (e.g. "disconnect the BMS connector" executed as grasp-then-disconnect on the battery box instead). **An earlier revision reported 12.4% here.** That figure came from a metric that counted any plan not exactly matching a reference as an unsafe command, which credited the validator for rejecting safe-but-non-canonical plans; splitting the ground truth into separate safety and plan-quality views corrected it. See "RQ2 is reported as two views" in `experiments/README.md`. |
+| **A scripted baseline still beats every LLM configuration** | The keyword-scripted baseline (SB) scores 64.7% Exact vs 52.9% for the full system (McNemar, Holm-corrected p=0.0225), and stays the top configuration in all 34 leave-one-command-out holdouts. The whole advantage comes from refusals: SB answers all 80 `should_block` trials correctly with an empty plan, versus 35/80 for the full system. On achievable (`should_pass`) commands the full system is ahead, 55/90 vs 30/90. The LLM helps with real tasks, and the weak point is knowing when to refuse. |
+| **Text-level validation catches almost no unsafe requests — 2.5%** | Validator recall against the per-command safety labels is 2.5% ([0.7%, 8.7%]): 2 of 80 should-refuse trials blocked (16 `should_block` commands × 5 trials). A real-execution probe that sent unvalidated hallucinated plans straight to the live ROS 2 skill server caught 3 of 9 ([12.1%, 64.6%]), so dispatch-level structural checks catch proportionally more than the text-level validator does. Both agree the two-tier check reliably catches format/vocabulary errors but misses semantically-wrong-but-structurally-valid actions (e.g. "disconnect the BMS connector" executed as grasp-then-disconnect on the battery box instead). **An earlier revision reported 12.4% here.** That figure came from a metric that counted any plan not exactly matching a reference as an unsafe command, which credited the validator for rejecting safe-but-non-canonical plans; splitting the ground truth into separate safety and plan-quality views corrected it. See "RQ2 is reported as two views" in `experiments/README.md`. |
 | **The automatic scorer is validated against a human, not assumed correct** | Cohen's κ = 0.690 (23/27 agreement) between the auto exact-match label and human ratings of the same outputs. All four disagreements are one pattern — the model prefixes a harmless `moveTo(approach_bolts)` before the reference action — so reported exact-match rates are a mild underestimate. Left uncorrected on purpose: widening the reference set to erase a known, explainable disagreement would be tuning the ruler to fit the answer. Ratings and the rubric are committed in `experiments/eval/human_ratings.json`. |
 | **A ground-truth bug was found and fixed, not just the model** | 9 of 34 reference plans required a position/object with no real joint-angle or scene definition anywhere in the codebase — verified by cross-checking `waypoints.json` and `visual_state_manager.py` line by line. Fixing the labels (not the robot) changed the ablation study's headline numbers. |
 | **Real ROS 2 execution now closes the loop** | RQ5 sends the same plans RQ1 scores as text into the live MoveIt stack: 17/18 achievable commands executed successfully regardless of whether the plan came from the validated or unvalidated configuration — the one structural failure (a "visually inspect for damage" command) fails for every plan source because there's no camera, not because of plan quality. |
 | **Perception-noise robustness boundary** | Grasp success collapses from 97.1% to 45.1% as simulated pose-estimation error grows from 5mm to 10mm — an exploratory geometric simulation, not a claim about real camera hardware, but it quantifies how much perception accuracy this system would need. |
-| **0 → 48 automated tests, plus a data-integrity bug fixed mid-project** | Added 48 unit tests for the scoring functions and statistics (Wilson CI, McNemar, Holm-Bonferroni, Cohen's κ). Also found and fixed a resume-logic bug where a failed LLM call that silently fell back to a non-LLM demo plan was being marked "done" instead of retried — a class of bug that permanently and invisibly corrupts a dataset if it isn't caught. |
+| **0 → 48 automated tests, plus a data-integrity bug fixed mid-project** | Added 48 unit tests: 37 for the scoring functions and statistics (Wilson CI, McNemar, Holm-Bonferroni, Cohen's κ), which run in CI, plus 11 for the ROS 2 skill handlers, which need a ROS 2 install. Also found and fixed a resume-logic bug where a failed LLM call that silently fell back to a non-LLM demo plan was being marked "done" instead of retried — a class of bug that permanently and invisibly corrupts a dataset if it isn't caught. |
 
-`REVISION_MEMO.md` is a full self-audit log: every place an earlier draft of this work overclaimed, what was found on re-checking, and what was fixed. It's kept because the corrections are more informative than a clean narrative would be.
+`CHANGELOG.md` lists every place an earlier draft of this work overclaimed, what re-checking found, and what was fixed.
 
 ## Engineering highlights
 
@@ -51,7 +52,7 @@ LLM robotics demos often look successful when they only check JSON validity or r
 ```
 User input (Web UI)
     ↓
-LLM Planner — natural language → skill sequence (Llama-3.2, RAG-assisted via ChromaDB)
+LLM Planner — natural language → skill sequence (GPT-4o-mini / Llama-3.2, RAG-assisted via ChromaDB)
     ↓
 Executor — sends ROS 2 commands
     ↓
@@ -64,7 +65,7 @@ ROS 2 Control → robot execution
 
 ## Tech stack
 
-ROS 2 Humble, MoveIt 2, Kinova Gen3 / Kortex, Robotiq-85 gripper, GPT-4o-mini (OpenAI) / Llama-3.2 (OpenRouter / Ollama), ChromaDB, sentence-transformers, Gradio, pytest, pandas/statsmodels (evaluation).
+ROS 2 Humble, MoveIt 2, Kinova Gen3 / Kortex, Robotiq-85 gripper, GPT-4o-mini (OpenAI) / Llama-3.2 (OpenRouter / Ollama), ChromaDB, sentence-transformers, Gradio, pytest, NumPy/SciPy/openpyxl (evaluation).
 
 ## Repository structure
 
@@ -78,7 +79,7 @@ ROS 2 Humble, MoveIt 2, Kinova Gen3 / Kortex, Robotiq-85 gripper, GPT-4o-mini (O
 │   └── eval/                      #   validation, RQ3 memory sweep, RQ4 perception-noise
 │                                   #   sim, RQ5 real ROS2/MoveIt execution + defense
 │                                   #   probe; stats (Wilson CI/McNemar/Holm-Bonferroni)
-├── REVISION_MEMO.md               # Self-audit log of corrected claims
+├── CHANGELOG.md                   # Corrected claims and fixes
 ├── PROJECT_STRUCTURE.md           # Detailed module-by-module breakdown
 └── FINAL_START.sh                 # Full-system launch script
 ```
@@ -89,7 +90,8 @@ ROS 2 Humble, MoveIt 2, Kinova Gen3 / Kortex, Robotiq-85 gripper, GPT-4o-mini (O
 
 ```bash
 cd experiments
-python -m pytest eval/ -v                                          # 48 tests
+pip install -r requirements.txt
+python -m pytest eval/ -v                                          # 37 tests (+11 skipped without ROS 2)
 python run_rq4_perception_noise.py --trials 300                    # local, free, geometric simulation
 python -m eval.analyze
 python -m eval.build_workbook                                      # -> eval/Result_robot.xlsx
@@ -111,14 +113,15 @@ python run_rq5_real_execution.py                     # should_pass: validated vs
 python run_rq5_real_execution.py --sources defense   # defense-in-depth probe
 ```
 
-The older per-RQ scripts (`run_rq1_ablation.py`, `run_rq2_safety.py`, `run_rq3_memory.py`) still work standalone — see `--help` on each — but `run_fast.py` is faster (shares one plan-generation pass across RQ1/RQ2) and is what generates the data RQ5 consumes.
+Use `run_fast.py` for RQ1–RQ3: it shares one plan-generation pass across them and produced the committed data that RQ5 consumes. The older per-RQ scripts (`run_rq1_ablation.py`, `run_rq2_safety.py`, `run_rq3_memory.py`) are kept for reference only, and `run_fast.py` still imports validator classes from `run_rq2_safety.py`.
 
 ### 2. Full ROS 2 system
 
 Requirements: Ubuntu 22.04 or WSL2, ROS 2 Humble, MoveIt 2, Python 3.x, and an OpenAI/OpenRouter API key or an Ollama install.
 
 ```bash
-cp src/llm_agent/.env.example src/llm_agent/.env   # add your API key
+colcon build                                        # builds install/
+cp src/llm_agent/.env.example src/llm_agent/.env   # set LLM_BACKEND and its API key
 bash FINAL_START.sh
 # then open http://localhost:7862
 ```

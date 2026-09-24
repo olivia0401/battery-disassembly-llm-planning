@@ -1,6 +1,6 @@
-# Experimental Suite for Dissertation
+# Experimental Suite
 
-Experiments for Section 4 of: **"Verifiable Language-to-Skill Planning for Battery Disassembly in ROS2 via Episodic Retrieval and Two-Tier Safety Validation"**
+Evaluation for the MSc project **"Verifiable Language-to-Skill Planning for Battery Disassembly in ROS2 via Episodic Retrieval and Two-Tier Safety Validation"**
 
 ## Test suite
 
@@ -16,7 +16,7 @@ Experiments for Section 4 of: **"Verifiable Language-to-Skill Planning for Batte
 | **RQ4** | *(exploratory)* Perception-noise robustness — geometric simulation, not a real camera pipeline | `run_rq4_perception_noise.py` |
 | **RQ5** | Does a plan that scores well/poorly on RQ1-3 actually execute safely on the real ROS2/MoveIt stack? Includes a defense-in-depth probe: send should_block commands' unvalidated hallucinated plans straight to the real skill_server and see whether dispatch-level checks catch what text-level validation missed. | `run_rq5_real_execution.py` |
 
-RQ1-3 share one underlying plan-generation pass (`run_fast.py`'s `run_planning_matrix`) so they must be run together via `run_fast.py`, not the standalone `run_rq1_ablation.py` / `run_rq2_safety.py` / `run_rq3_memory.py` scripts (those are the older per-RQ implementations `run_fast.py` superseded for speed; kept because `run_fast.py` still imports validator classes from `run_rq2_safety.py`).
+RQ1-3 share one underlying plan-generation pass (`run_fast.py`'s `run_planning_matrix`) so they must be run together via `run_fast.py`, not the legacy standalone `run_rq1_ablation.py` / `run_rq2_safety.py` / `run_rq3_memory.py` scripts (those are the older per-RQ implementations `run_fast.py` superseded for speed; kept because `run_fast.py` still imports validator classes from `run_rq2_safety.py`).
 
 ## RQ2 is reported as two views, not one number
 

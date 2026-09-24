@@ -1,6 +1,6 @@
-# 毕业论文实验套件
+# 实验套件
 
-对应论文第 4 章的实验："**Verifiable Language-to-Skill Planning for Battery Disassembly in ROS2 via Episodic Retrieval and Two-Tier Safety Validation**"
+硕士项目的评估实验："**Verifiable Language-to-Skill Planning for Battery Disassembly in ROS2 via Episodic Retrieval and Two-Tier Safety Validation**"
 
 ## 测试集
 

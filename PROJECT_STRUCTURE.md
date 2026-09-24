@@ -1,207 +1,85 @@
-# LLM-ROS2 电池拆卸系统 - 项目结构
+# Project structure
 
-## 项目概述
-
-基于LLM的ROS2机器人电池拆卸控制系统，支持通过自然语言指令控制Kinova Gen3机械臂执行拆卸任务。
-
-## 目录结构
+Module-by-module map of the repository. See `README.md` for results and how to run things.
 
 ```
-llms-ros2/
+.
 ├── src/
-│   ├── battery_dismantle_task/      # ROS2核心包
-│   │   ├── battery_dismantle_task/  # Python模块
-│   │   │   ├── skill_server.py      # 主技能服务器 (446行，已模块化)
-│   │   │   ├── motion_executor.py   # 运动规划执行器 (197行)
-│   │   │   ├── scene_manager.py     # Planning Scene管理 (102行)
-│   │   │   ├── skill_handlers.py    # 高级技能处理 (139行)
-│   │   │   ├── session.py           # Session数据类 (11行)
-│   │   │   ├── visual_state_manager.py # 可视化管理
-│   │   │   └── __init__.py
-│   │   ├── config/                  # 配置文件
-│   │   │   ├── waypoints.json       # 关节位置定义
-│   │   │   ├── moveit/              # MoveIt配置
-│   │   │   └── rviz/                # RViz配置
-│   │   ├── launch/                  # 启动文件
-│   │   │   └── fake_execution_complete.launch.py
-│   │   └── package.xml
+│   ├── battery_dismantle_task/            # ROS 2 (ament_python) package
+│   │   ├── battery_dismantle_task/
+│   │   │   ├── skill_server.py            # Receives LLM commands, dispatches skills, publishes feedback
+│   │   │   ├── skill_handlers.py          # Higher-level skills (grasp, release, dismantle, inspect, unscrew, ...)
+│   │   │   ├── motion_executor.py         # MoveIt 2 planning + trajectory execution
+│   │   │   ├── motion_config.py           # Motion timeouts and tuning constants
+│   │   │   ├── scene_manager.py           # Planning-scene attach/detach and ACM merge
+│   │   │   ├── object_definitions.py      # Scene object dimensions and positions
+│   │   │   ├── visual_state_manager.py    # Creates scene objects and mirrors grasp/release in RViz
+│   │   │   ├── session.py                 # Per-command session context
+│   │   │   ├── publish_initial_joint_states.py
+│   │   │   └── interactive_joint_control.py  # Optional: drive joints from RViz markers (not launched by default)
+│   │   ├── config/                        # waypoints.json, joint limits, MoveIt config, RViz config
+│   │   ├── launch/
+│   │   │   ├── fake_execution_complete.launch.py      # Full stack used by FINAL_START.sh and RQ5
+│   │   │   ├── run_dismantle_task.launch.py           # MoveIt + RViz only
+│   │   │   └── start_controllers_interactive.launch.py
+│   │   ├── urdf/, grippers/                # Kinova Gen3 + Robotiq 2F-85 description
+│   │   ├── package.xml, setup.py, setup.cfg
 │   │
-│   └── llm_agent/                   # LLM智能体
-│       ├── executor.py              # 命令执行器 (258行)
-│       ├── planner.py               # LLM规划器 (352行)
-│       ├── llm_client.py            # LLM客户端
-│       ├── rag_engine.py            # RAG检索引擎 (408行)
-│       ├── validator.py             # 命令验证器
-│       ├── web_ui.py                # Web界面 (360行，已合并)
-│       ├── config/                  # 配置文件
-│       │   ├── skills.json
-│       │   └── safety.yaml
-│       └── requirements.txt
+│   └── llm_agent/                          # LLM side (plain Python)
+│       ├── planner.py                      # Natural language -> skill sequence (optionally RAG-assisted)
+│       ├── llm_client.py                   # OpenAI / OpenRouter / Ollama / Chutes backends
+│       ├── rag_engine.py                   # ChromaDB + sentence-transformers retrieval
+│       ├── validator.py                    # Schema + sequence-rule validation
+│       ├── executor.py                     # Publishes commands to ROS 2 (or mock mode)
+│       ├── topics.py                       # ROS 2 topic-name constants
+│       ├── web_ui.py                       # Gradio UI (port 7862)
+│       ├── config/                         # skills.json, safety.yaml, prompt.txt, prompt_clean.txt
+│       ├── rag_data/                       # Experience cases for retrieval
+│       ├── requirements.txt
+│       └── .env.example
 │
-├── FINAL_START.sh                   # 系统启动脚本
-└── README.md                        # 项目说明
+├── experiments/                            # Evaluation (RQ1-RQ5); see experiments/README.md
+│   ├── run_fast.py                         # RQ1-RQ3 data collection (produced results_fast/)
+│   ├── run_rq4_perception_noise.py         # RQ4 geometric simulation
+│   ├── run_rq5_real_execution.py           # RQ5 live ROS 2 execution
+│   ├── run_rq1_ablation.py, run_rq2_safety.py, run_rq3_memory.py  # legacy per-RQ scripts
+│   ├── unified_test_suite.json             # 34 test commands
+│   ├── results_fast/                       # rq1..rq5 JSONL result data
+│   └── eval/                               # metrics, stats, analysis, workbook, tests
+│
+├── .github/workflows/ci.yml                # Runs the pure-Python unit tests
+├── FINAL_START.sh                          # Full-system launch script
+├── CHANGELOG.md
+└── README.md
 ```
 
-## 核心模块说明
+## Skills dispatched by `skill_server.py`
 
-### 1. ROS2机器人控制 (battery_dismantle_task)
+- Primitives: `moveTo`, `openGripper`, `closeGripper`, `approach`, `place`, `retreat`
+- Higher-level: `grasp`, `release`, `dismantle`, `sequence`, `inspect`, `unscrew`, `disconnect`, `waitForStabilization`, `rotateGripper`
+- Selection: `selectObject`, `selectPlace`
 
-#### skill_server.py - 主服务器
-- **功能**: 接收LLM命令，调度技能执行
-- **重构**: 从787行拆分为5个模块（446+197+139+102+11行）
-- **模块化设计**:
-  - `motion_executor.py`: 运动规划和轨迹执行
-  - `scene_manager.py`: Planning Scene对象attach/detach
-  - `skill_handlers.py`: 高级技能（grasp, release, dismantle）
-  - `session.py`: 会话上下文数据
+## Message formats
 
-#### 支持的技能
-- **原子技能**: moveTo, openGripper, closeGripper, approach, place, retreat
-- **高级技能**: grasp, release, dismantle, sequence
-- **管理技能**: selectObject, selectPlace
+Command (`llm_cmd/v1`), published by `executor.py` (`command_id` is optional and echoed back in feedback):
 
-### 2. LLM智能体 (llm_agent)
-
-#### planner.py - 任务规划
-- **功能**: 将自然语言转换为机器人技能序列
-- **特性**: 支持RAG检索历史经验
-
-#### executor.py - 命令执行
-- **功能**: 执行规划的技能序列
-- **模式**: ROS2模式 / Mock模式
-
-#### web_ui.py - Web界面
-- **功能**: Gradio界面，用户交互
-- **重构**: 合并了3个版本（web_ui.py, web_ui_v2.py, web_ui_fixed.py）
-- **端口**: http://localhost:7862
-
-## 快速启动
-
-```bash
-# 1. 启动完整系统
-bash FINAL_START.sh
-
-# 2. 在浏览器打开 Web UI
-http://localhost:7862
-
-# 3. 测试步骤
-- 点击 'Initialize System'
-- 输入: "Go to home position"
-- 点击 'Execute'
-- 观察 RViz 窗口
-```
-
-## 系统架构
-
-```
-用户输入 (Web UI)
-    ↓
-LLM Planner (自然语言 → 技能序列)
-    ↓
-Executor (发送ROS2命令)
-    ↓
-Skill Server (技能调度)
-    ↓
-Motion Executor (运动规划)
-    ↓
-MoveIt2 + ROS2 Control
-    ↓
-机器人执行
-```
-
-## 数据流
-
-1. **命令格式** (JSON)
 ```json
-{
-  "schema": "llm_cmd/v1",
-  "command_id": "cmd_001",
-  "skill": "moveTo",
-  "target": "HOME"
-}
+{"schema": "llm_cmd/v1", "skill": "moveTo", "target": "HOME"}
 ```
 
-2. **反馈格式** (JSON)
+Feedback (`llm_fb/v1`), published by `skill_server.py`:
+
 ```json
-{
-  "schema": "llm_fb/v1",
-  "status": "success",
-  "message": "Skill 'moveTo' completed",
-  "command_id": "cmd_001"
-}
+{"schema": "llm_fb/v1", "status": "success", "message": "Skill 'moveTo' completed", "command_id": "cmd_001"}
 ```
 
-## 重构改进
+## Adding a skill
 
-### 已完成
-- 拆分skill_server.py (787行 → 5个文件<200行)
-- 合并3个web_ui版本为1个
-- 清理测试文件和备份
-- 修复launch文件包路径
-- 系统成功启动并运行
+1. Implement it in `skill_handlers.py`.
+2. Add a branch to the dispatcher in `skill_server.py`.
+3. Describe it in `src/llm_agent/config/skills.json` so the planner and validator know about it.
 
-### 代码质量
-- 所有核心工作文件 < 450行
-- 模块化设计，职责清晰
-- 适合工程部署
+## Logs
 
-## 依赖项
-
-### 系统依赖
-- ROS2 Humble
-- MoveIt2
-- ros-humble-kortex-* (已安装在 /opt/ros/humble)
-
-### Python依赖
-- gradio
-- openai (LLM API)
-- chromadb (RAG)
-- sentence-transformers (RAG)
-
-## 配置文件
-
-- `waypoints.json`: 机器人位姿定义
-- `skills.json`: LLM技能描述
-- `safety.yaml`: 安全限制
-- `moveit/`: MoveIt2配置
-- `rviz/`: RViz可视化配置
-
-## 日志位置
-
-- ROS2 Launch: `/tmp/ros2_launch.log`
-- Web UI: `/tmp/webui_v2.log`
-- 系统启动: `/tmp/final_start_output.log`
-
-## 技术亮点
-
-1. **模块化架构**: 核心代码拆分为独立模块，易于维护
-2. **LLM集成**: 自然语言控制机器人
-3. **RAG增强**: 基于历史经验优化任务规划
-4. **MoveIt2**: 先进的运动规划
-5. **Web界面**: 友好的用户交互
-
-## 开发者指南
-
-### 添加新技能
-1. 在 `skill_handlers.py` 添加技能实现
-2. 在 `skill_server.py` 的 `dispatch_skill()` 添加调度逻辑
-3. 在 `config/skills.json` 添加技能描述
-
-### 修改waypoints
-编辑 `config/waypoints.json`，定义新的位姿或对象
-
-### 调试
-```bash
-# 查看ROS2节点
-ros2 node list
-
-# 查看话题
-ros2 topic list
-
-# 查看skill_server日志
-tail -f /tmp/ros2_launch.log | grep skill_server
-```
-
-## 许可证
-
-Apache-2.0
+`FINAL_START.sh` writes to `$LOG_DIR` (default `/tmp`): `ros2_launch.log` and `webui.log`.
+RQ5 writes `/tmp/rq5_ros2_launch.log`.

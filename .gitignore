@@ -50,3 +50,6 @@ experiments/eval/analysis_summary.json
 
 # Screen recordings (demos live on YouTube, not in the repo)
 *.mp4
+
+# Internal notes (kept locally, not published)
+REVISION_MEMO.md
