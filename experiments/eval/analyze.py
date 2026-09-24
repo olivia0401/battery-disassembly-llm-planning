@@ -634,10 +634,8 @@ def main():
                   f"'not tested', not estimated.")
     if summary.get("rq4"):
         r4 = summary["rq4"]
-        print(f"\nRQ4 perception-noise simulation (EXPLORATORY -- geometric simulation, "
-              f"not real sensor data; answers the 'perception' third of the supervisor's "
-              f"feedback, complementing RQ5's real-execution check on the 'motion "
-              f"planning/autonomous execution' third):")
+        print("\nRQ4 perception-noise simulation (EXPLORATORY -- geometric simulation, "
+              "not real sensor data; complements RQ5's real-execution check):")
         for sigma, ci in r4["per_sigma_pooled"].items():
             print(f"  sigma={sigma:3}mm  grasp-success {100*ci['p']:5.1f}% [{100*ci['lo']:.1f},{100*ci['hi']:.1f}]")
         print(f"  crossover (success CI upper bound < 50%): sigma={r4['crossover_sigma_mm']}mm")

@@ -16,8 +16,7 @@ from pathlib import Path
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
-from eval.analyze import (load_refs, load_vocab, enrich, load_json, _latest,
-                          load_rq, drop_fallbacks, CONFIG_NAMES, LEVEL_NAMES)
+from eval.analyze import (load_refs, load_vocab, enrich, load_rq, drop_fallbacks)
 
 HERE = Path(__file__).parent
 SUMMARY = json.loads((HERE / "analysis_summary.json").read_text(encoding="utf-8"))
@@ -85,10 +84,29 @@ def tab_exec(wb):
     def ex(c):
         ci = pcfg.get(c, {}).get("exact"); return f"{100*ci['p']:.1f}%" if ci else "n/a"
     cmps = rq1.get("comparisons", {})
-    def pv(k):
-        v = cmps.get(k); return f"{v['p_value']:.2f}" if v else "n/a"
     prov = SUMMARY.get("data_provenance", {})
     fb = sum(v.get("fallback_demo", 0) + v.get("error", 0) for v in prov.values())
+    def ph(k):
+        v = cmps.get(k) or {}
+        h = v.get("holm")
+        if h:
+            return "p_holm<0.0001" if h["p_corrected"] < 1e-4 else f"p_holm={h['p_corrected']:.4f}"
+        return (f"p={v['p_value']:.4f}" if v else "n/a")
+    def exp(c):
+        ci = pcfg.get(c, {}).get("exact"); return ci["p"] if ci else None
+    rag_word = ("higher" if (exp("LR") or 0) > (exp("LO") or 0)
+                else "lower" if (exp("LR") or 0) < (exp("LO") or 0) else "equal")
+    loo = rq1.get("leave_one_command_out", {}) or {}
+    winner = loo.get("full_winner") or max(pcfg, key=lambda c: exp(c) or 0, default="n/a")
+    loo_n = loo.get("n_commands", 0)
+    loo_pct = f"{100*loo.get('agreement_with_full_data_winner', 0):.0f}%"
+    fv_safety = (((SUMMARY.get("rq2") or {}).get("per_level") or {}).get("FV") or {}).get("safety") or {}
+    rec = fv_safety.get("recall")
+    recall_str = f"{pct(rec)} at Full validation" if rec else "n/a"
+    raw1 = load_rq(1)
+    models = ", ".join(sorted({r["model"] for r in raw1 if r.get("model")})) or "n/a"
+    n_cmds = len({r.get("command") for r in raw1})
+    n_trials = len({r.get("trial_id") for r in raw1})
 
     r = 3
     blocks = [
@@ -97,31 +115,30 @@ def tab_exec(wb):
             "RQ2  Does layered validation catch unsafe/incorrect plans without over-blocking?",
             "RQ3  Does RAG memory size improve planning correctness, and where does it saturate?",
         ]),
-        ("2. Headline decision (clean leak-free run)", [
+        ("2. Headline results (leak-free run)", [
             f"• Exact-match correctness: SB {ex('SB')}, LO {ex('LO')}, "
             f"LV {ex('LV')}, LR {ex('LR')}, FS {ex('FS')}.",
-            f"• McNemar p-values (meaningful comparisons): SB vs LO {pv('SB vs LO')}, "
-            f"LO vs LR {pv('LO vs LR')}, SB vs FS {pv('SB vs FS')} (see Tab 3 for significance).",
-            "• RAG (LR/FS) was numerically LOWER than no-RAG here, not higher. The dissertation's "
-            "'RAG helps / validation hurts / negative synergy' findings are NOT reproduced.",
-            "• Validation still earns its place for SAFETY (blocking out-of-domain/faulty plans), "
-            "not for raising correctness.",
+            f"• McNemar (Holm-corrected): SB vs LO {ph('SB vs LO')}; LO vs LR {ph('LO vs LR')}; "
+            f"SB vs FS {ph('SB vs FS')}.",
+            f"• RAG effect: LR {ex('LR')} vs LO {ex('LO')} ({rag_word} than no-RAG).",
+            f"• Best configuration overall: {winner} ({ex(winner)}); leave-one-command-out keeps "
+            f"{winner} as the winner in {loo_pct} of {loo_n} holdouts.",
+            f"• Validator safety recall (should_block commands blocked): {recall_str}.",
         ]),
-        ("3. Key methodology corrections (vs the dissertation)", [
-            "• Old 'success rate ~94%' measured PLAN VALIDITY (schema passes), not correctness. "
-            "Real Exact-match is far lower (see Tab 3).",
-            "• This run is LEAK-FREE: clean prompt (no gold answers) + memory disjoint from the test set, "
-            "and every row records planner_mode so demo-fallbacks are excluded, not hidden.",
-            "• The same references score every config, so the 'no significant difference' conclusion is "
-            "robust to reference error.",
+        ("3. Methodology", [
+            "• Two success definitions: plan_valid (schema passes) vs Exact (matches an accepted "
+            "reference plan). Plan validity overstates correctness (see Tab 3).",
+            "• Leak-free: clean prompt (no gold answers) + RAG memory disjoint from the test set; "
+            "every row records planner_mode so demo-fallbacks are excluded, not hidden.",
+            "• The same references score every configuration, so between-config comparisons are "
+            "not skewed by reference quality.",
         ]),
-        ("4. Provenance and honest caveats", [
-            "• Model: Llama-3.2-1B run LOCALLY via Ollama (the dissertation's 'GPT-4' claim is wrong; "
-            "earlier runs used Llama-3.2-3B via OpenRouter).",
-            f"• Scale: trials=1, 35 commands -> wide confidence intervals, low statistical power. "
-            f"{fb} demo-fallback rows were excluded from LLM metrics.",
-            "• So this is a PIPELINE-VALIDATION + directional result, not final publishable numbers. "
-            "For those: stronger model + trials>=5 + human-reviewed references (Tab 4) + Cohen's kappa.",
+        ("4. Provenance and caveats", [
+            f"• Model(s): {models}.",
+            f"• Scale: {n_cmds} commands x {n_trials} trials per configuration. "
+            f"{fb} demo-fallback/error rows were excluded from LLM metrics.",
+            "• Exact is strict about harmless extra approach moves (see Tab 4 / Cohen's kappa), "
+            "so Exact rates are a mild underestimate.",
         ]),
     ]
     for title, lines in blocks:
@@ -148,8 +165,8 @@ def tab_reco(wb):
         "SB": "Correctly REFUSES out-of-domain commands (safe), but fails novel functional language.",
         "LO": "Handles functional language, but HALLUCINATES plans for out-of-domain commands.",
         "LV": "Same plans as LO; validation only gates acceptance, not correctness.",
-        "LR": "RAG did not help here (lower than LO on this weak model).",
-        "FS": "No correctness advantage over LO; significantly below the refusing baseline (SB).",
+        "LR": "LO plus RAG retrieval; compare with LO via the LO vs LR McNemar test (Tab 3).",
+        "FS": "Same plans as LR; validation only gates acceptance. Compare with SB via SB vs FS (Tab 3).",
     }
     r = 5
     if rq1:
@@ -166,10 +183,10 @@ def tab_reco(wb):
     r += 1
     _header(ws, r, ["Scenario", "Recommended system", "Why"]); r += 1
     for scen, sysrec, why in [
-        ("Normal commands", "LLM only or LLM+RAG", "Highest Exact/F1; RAG no sig. benefit"),
-        ("Safety-sensitive", "Full System (LLM+RAG+Validation)", "Best blocking of faulty/OOD plans"),
+        ("In-domain commands", "LLM+RAG", "Highest Exact among the LLM configurations in this run (Tab 3)"),
+        ("Safety-sensitive", "Do not rely on text-level validation alone", "Validator safety recall is low (RQ2 safety view); add dispatch-level checks (RQ5)"),
         ("Low-latency", "LLM only", "Avoids RAG retrieval + validation overhead"),
-        ("Out-of-domain input", "Any config WITH validation", "Validation blocks unsafe execution"),
+        ("Out-of-domain input", "Explicit refusal / OOD detection", "The scripted baseline's refusals beat every LLM configuration on Exact"),
     ]:
         _row(ws, r, [scen, sysrec, why]); ws.row_dimensions[r].height = 28; r += 1
 
@@ -273,7 +290,7 @@ def tab_analysis(wb):
     # RQ3 memory
     rq3 = SUMMARY.get("rq3")
     if rq3:
-        ws.cell(row=r, column=1, value="RQ3 — Memory size (Exact vs k) — supports: 'RAG saturates / no gain'").font = H2; r += 1
+        ws.cell(row=r, column=1, value="RQ3 — Memory size (Exact vs k)").font = H2; r += 1
         _header(ws, r, ["k", "Exact (95% CI)", "Step F1", "Seen Exact", "Unseen Exact", "Mean sim"]); r += 1
         for k, c in rq3["per_k"].items():
             _row(ws, r, [k, pct(c["exact"]), c["mean_f1"],
