@@ -2,9 +2,14 @@
 Executor - ROS2 or Mock
 Provides fine-grained control and state query capabilities
 """
-import rclpy
-from std_msgs.msg import String
-from sensor_msgs.msg import JointState
+try:
+    import rclpy
+    from std_msgs.msg import String
+    from sensor_msgs.msg import JointState
+except ImportError:
+    rclpy = None
+    String = None
+    JointState = None
 import json
 import time
 from typing import Dict, Optional
@@ -34,6 +39,8 @@ class Executor:
 
     def _init_ros(self):
         """Initialize ROS2 node"""
+        if rclpy is None:
+            raise ImportError("ROS 2 Python packages are required when use_ros=True")
         if not rclpy.ok():
             rclpy.init()
 
@@ -144,7 +151,8 @@ class Executor:
         # Build the command - the schema field is required
         command = {
             "schema": "llm_cmd/v1",
-            "skill": action['name']
+            "skill": action['name'],
+            "params": dict(action['params']),
         }
 
         # Add the target parameter if present
@@ -154,24 +162,24 @@ class Executor:
         # Publish the command
         msg = String()
         msg.data = json.dumps(command)
+        self.last_feedback = None
         self.command_pub.publish(msg)
         print(f"   Published command: {msg.data}")
 
         # Wait for feedback
-        self.last_feedback = None
-        start_time = time.time()
+        start_time = time.monotonic()
 
         while self.last_feedback is None:
             rclpy.spin_once(self.node, timeout_sec=0.1)
 
-            if time.time() - start_time > timeout:
+            if time.monotonic() - start_time > timeout:
                 print(f"   ⏱  Timeout after {timeout}s")
                 return False
 
         # Parse JSON feedback: {"status": "success", "message": "...", "timestamp": ...}
         try:
             feedback = json.loads(self.last_feedback)
-            return feedback.get("status") == "success"
+            return isinstance(feedback, dict) and feedback.get("status") == "success"
         except (json.JSONDecodeError, KeyError):
             # Also accept plain-string feedback
             return self.last_feedback == "success"

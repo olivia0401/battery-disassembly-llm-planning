@@ -23,4 +23,4 @@ jobs:
       # in a plain runner. The ROS-dependent test_skill_handlers.py is excluded
       # on purpose — it needs a full ROS 2 (rclpy) install.
       - name: Run pure-function unit tests
-        run: python -m pytest experiments/eval/test_metrics.py experiments/eval/test_stats.py experiments/eval/test_validator.py -v
+        run: python -m pytest experiments/eval/test_metrics.py experiments/eval/test_stats.py experiments/eval/test_validator.py experiments/eval/test_executor.py -v
