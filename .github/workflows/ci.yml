@@ -17,10 +17,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install test dependencies
-        run: pip install pytest
+        run: pip install pytest pyyaml
 
       # metrics.py and stats.py are pure functions (no ROS2/LLM), so they run
       # in a plain runner. The ROS-dependent test_skill_handlers.py is excluded
       # on purpose — it needs a full ROS 2 (rclpy) install.
       - name: Run pure-function unit tests
-        run: python -m pytest experiments/eval/test_metrics.py experiments/eval/test_stats.py -v
+        run: python -m pytest experiments/eval/test_metrics.py experiments/eval/test_stats.py experiments/eval/test_validator.py -v

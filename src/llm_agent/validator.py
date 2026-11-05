@@ -2,6 +2,7 @@
 Two-tier validation - Schema + Runtime.
 """
 import json
+import math
 import yaml
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -16,10 +17,10 @@ class Validator:
             config_dir = Path(__file__).parent / "config"
 
         # Load configuration
-        with open(config_dir / "skills.json") as f:
+        with open(config_dir / "skills.json", encoding="utf-8") as f:
             self.skills_config = json.load(f)
 
-        with open(config_dir / "safety.yaml") as f:
+        with open(config_dir / "safety.yaml", encoding="utf-8") as f:
             self.safety_config = yaml.safe_load(f)
 
         self.valid_skills = {s['name'] for s in self.skills_config['available_skills']}
@@ -53,6 +54,8 @@ class Validator:
         errors = []
 
         # 1. Check format
+        if not isinstance(plan, dict):
+            return False, ["Plan must be an object"]
         if 'plan' not in plan:
             errors.append("Missing 'plan' key")
             return False, errors
@@ -65,6 +68,9 @@ class Validator:
         # 2. Check each action
         for i, action in enumerate(actions):
             # Check required fields
+            if not isinstance(action, dict):
+                errors.append(f"Step {i+1}: action must be an object")
+                continue
             if 'name' not in action:
                 errors.append(f"Step {i+1}: missing 'name'")
                 continue
@@ -75,6 +81,12 @@ class Validator:
 
             skill_name = action['name']
             params = action['params']
+            if not isinstance(skill_name, str):
+                errors.append(f"Step {i+1}: name must be a string")
+                continue
+            if not isinstance(params, dict):
+                errors.append(f"Step {i+1}: params must be an object")
+                continue
 
             # Check the skill exists
             if skill_name not in self.valid_skills:
@@ -94,11 +106,11 @@ class Validator:
             # 2) Check parameter values are legal for the skill type
             if skill_name in self.pose_target_skills:
                 target = params['target']
-                if target not in self.valid_poses:
+                if not isinstance(target, str) or target not in self.valid_poses:
                     errors.append(f"Step {i+1}: invalid pose '{target}'")
             elif skill_name in self.object_target_skills:
                 target = params['target']
-                if target not in self.valid_objects:
+                if not isinstance(target, str) or target not in self.valid_objects:
                     errors.append(
                         f"Step {i+1}: {skill_name} needs an object target, "
                         f"got invalid/pose value '{target}'"
@@ -106,15 +118,17 @@ class Validator:
             elif skill_name == "rotateGripper":
                 angle = params['angle']
                 try:
-                    float(angle)
-                except (TypeError, ValueError):
+                    if isinstance(angle, bool) or not math.isfinite(float(angle)):
+                        raise ValueError("angle must be finite")
+                except (TypeError, ValueError, OverflowError):
                     errors.append(
                         f"Step {i+1}: rotateGripper angle must be numeric, "
                         f"got '{angle}'"
                     )
 
         # 3. Check sequence constraints
-        errors.extend(self._check_sequence_constraints(actions))
+        if not errors:
+            errors.extend(self._check_sequence_constraints(actions))
 
         return len(errors) == 0, errors
 
@@ -147,6 +161,12 @@ class Validator:
             (is_safe, message)
         """
         limits = self.safety_config['runtime_limits']
+        try:
+            if any(isinstance(value, bool) or not isinstance(value, (int, float))
+                   or not math.isfinite(value) for value in (force, temperature)):
+                return False, "Sensor readings must be finite numbers"
+        except (TypeError, ValueError, OverflowError):
+            return False, "Sensor readings must be finite numbers"
 
         if force > limits['force_max']:
             return False, f"Force {force}N exceeds limit {limits['force_max']}N"
